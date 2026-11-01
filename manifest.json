@@ -1,7 +1,7 @@
 {
-  "name": "Rummikub - Table de Jeu",
+  "name": "Rummikub",
   "short_name": "Rummikub",
-  "start_url": "./Rummikub.html",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#072013",
   "theme_color": "#0e3d24",
