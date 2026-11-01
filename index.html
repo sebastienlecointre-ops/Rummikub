@@ -3697,6 +3697,20 @@
         return { profile: 'expert', aiStyle: 'strategic', budgetMs: 1500, minThinkMs: 1800 };
     };
 
+    function getAiBudget(level, tableTileCount, opponentHandCount) {
+        if (level === 'facile') return 300;
+        const isLate = (tableTileCount >= 40 || opponentHandCount <= 5);
+        const isMid = (tableTileCount >= 20 && tableTileCount < 40);
+        if (level === 'normal') {
+            if (isLate) return 3000;
+            if (isMid) return 2000;
+            return 1000;
+        }
+        if (isLate) return 5000;
+        if (isMid) return 3000;
+        return 1500;
+    }
+
     function onWelcomeAiSelectChange(val) {
         const wDesc = document.getElementById('welcome-ai-desc');
         if (wDesc) wDesc.textContent = getAiLevelDescription(val);
@@ -3718,7 +3732,6 @@
         } = ENGINE;
         const ScoreWeights = {
             win: 500000,
-            retrieveJoker: 25000,
             finishSpeed: 5000,
             playTiles: 1000,
             dumpJoker: 35000,
@@ -3787,6 +3800,8 @@
         }
         function getDeterministicFallback(handTiles, currentBoard, isOpened) {
             if (!isOpened) return [];
+            const tac = findTacticalMoves(handTiles, currentBoard);
+            if (tac.steps && tac.steps.length > 0) return tac.steps;
             const simpleRes = computeAllSimpleAdditions(handTiles, currentBoard);
             let steps = [...simpleRes.steps];
             const remainingHandMelds = solveHandOnlyMelds(simpleRes.remainingHand);
@@ -4074,13 +4089,286 @@
             return [];
         }
 
+        function detectTypeFast(tiles) {
+            if (isValidMeldFast(tiles, 'run')) return 'run';
+            if (isValidMeldFast(tiles, 'group')) return 'group';
+            return null;
+        }
+
+        function findTacticalMoves(hand, board, options = {}) {
+            let curHand = hand.map(t => ({ id: t.id, value: t.value, color: t.color, isJoker: t.isJoker }));
+            let curRows = (board || []).map(r => ({
+                id: r.id,
+                type: r.type,
+                tiles: (r.tiles || []).map(t => ({ id: t.id, value: t.value, color: t.color, isJoker: t.isJoker }))
+            }));
+            let allSteps = [];
+            let newRowCounter = 0;
+            const nextRowId = () => 'new-' + (++newRowCounter);
+            const handTileVal = t => (t.isJoker ? (options.endGame ? 30 : 0) : t.value);
+
+            for (let iter = 0; iter < 12; iter++) {
+                const candidates = [];
+                const freeTiles = [];
+                for (let r = 0; r < curRows.length; r++) {
+                    const R = curRows[r];
+                    if (R.tiles.some(t => t.isJoker)) continue;
+                    const len = R.tiles.length;
+                    if (R.type === 'run') {
+                        const sorted = [...R.tiles].sort((a, b) => a.value - b.value);
+                        if (len >= 4) {
+                            freeTiles.push({ tile: sorted[0], rowId: R.id, kind: 'min', rowLen: len });
+                            freeTiles.push({ tile: sorted[len - 1], rowId: R.id, kind: 'max', rowLen: len });
+                        }
+                        for (let idx = 3; idx <= len - 4; idx++) freeTiles.push({ tile: sorted[idx], rowId: R.id, kind: 'mid', rowLen: len });
+                    } else if (R.type === 'group' && len === 4) {
+                        for (let idx = 0; idx < len; idx++) freeTiles.push({ tile: R.tiles[idx], rowId: R.id, kind: 'group', rowLen: len });
+                    }
+                }
+
+                // G1 : Ajout simple
+                for (let i = 0; i < curHand.length; i++) {
+                    const h = curHand[i];
+                    for (let r = 0; r < curRows.length; r++) {
+                        const R = curRows[r];
+                        if (R.tiles.some(t => t.isJoker)) continue;
+                        if (isValidMeldFast([...R.tiles, h], R.type)) {
+                            candidates.push({
+                                placedCount: 1,
+                                points: handTileVal(h),
+                                usesHandJoker: !!h.isJoker,
+                                execute() {
+                                    curHand.splice(curHand.findIndex(t => t.id === h.id), 1);
+                                    R.tiles.push(h);
+                                    if (R.type === 'run') R.tiles.sort((a, b) => a.value - b.value);
+                                    allSteps.push({ action: 'place_from_hand', tileId: h.id, fromLineId: null, toLineId: R.id, type: R.type, label: 'Ajout simple' });
+                                }
+                            });
+                        }
+                    }
+                }
+
+                // G2 : Insertion-scission
+                for (let i = 0; i < curHand.length; i++) {
+                    const h = curHand[i];
+                    if (h.isJoker) continue;
+                    for (let r = 0; r < curRows.length; r++) {
+                        const R = curRows[r];
+                        if (R.type !== 'run' || R.tiles.some(t => t.isJoker) || R.tiles[0].color !== h.color) continue;
+                        if (!R.tiles.some(t => t.value === h.value)) continue;
+                        const minVal = Math.min(...R.tiles.map(t => t.value));
+                        const maxVal = Math.max(...R.tiles.map(t => t.value));
+                        if (minVal <= h.value - 2 && maxVal >= h.value + 2) {
+                            candidates.push({
+                                placedCount: 1,
+                                points: h.value,
+                                usesHandJoker: false,
+                                execute() {
+                                    curHand.splice(curHand.findIndex(t => t.id === h.id), 1);
+                                    const newRowId = nextRowId();
+                                    const toMove = R.tiles.filter(t => t.value > h.value).sort((a, b) => a.value - b.value);
+                                    R.tiles = R.tiles.filter(t => t.value <= h.value);
+                                    curRows.push({ id: newRowId, type: 'run', tiles: [h, ...toMove] });
+                                    allSteps.push({ action: 'place_from_hand', tileId: h.id, fromLineId: null, toLineId: newRowId, type: 'run', label: 'Insertion suite' });
+                                    for (const m of toMove) allSteps.push({ action: 'move_from_board_to_line', tileId: m.id, fromLineId: R.id, toLineId: newRowId, type: 'run', label: 'Scission suite' });
+                                }
+                            });
+                        }
+                    }
+                }
+
+                // G3 : Extraction pour former une nouvelle combinaison
+
+                function addG3(hTiles, fList) {
+                    const meldTiles = [...hTiles, ...fList.map(f => f.tile)];
+                    const meldType = detectTypeFast(meldTiles);
+                    if (!meldType) return;
+                    candidates.push({
+                        placedCount: hTiles.length,
+                        points: hTiles.reduce((sum, t) => sum + handTileVal(t), 0),
+                        usesHandJoker: hTiles.some(t => t.isJoker),
+                        execute() {
+                            for (const h of hTiles) curHand.splice(curHand.findIndex(t => t.id === h.id), 1);
+                            for (const f of fList) {
+                                const R = curRows.find(r => r.id === f.rowId);
+                                if (f.kind === 'mid') {
+                                    const splitRowId = nextRowId();
+                                    const toMove = R.tiles.filter(t => t.value > f.tile.value).sort((a, b) => a.value - b.value);
+                                    R.tiles = R.tiles.filter(t => t.value < f.tile.value);
+                                    curRows.push({ id: splitRowId, type: 'run', tiles: toMove });
+                                    for (const m of toMove) allSteps.push({ action: 'move_from_board_to_line', tileId: m.id, fromLineId: R.id, toLineId: splitRowId, type: 'run', label: 'Scission suite' });
+                                } else R.tiles = R.tiles.filter(t => t.id !== f.tile.id);
+                            }
+                            const newMeldRowId = nextRowId();
+                            const sortedMeld = [...meldTiles];
+                            if (meldType === 'run') sortedMeld.sort((a, b) => a.value - b.value);
+                            curRows.push({ id: newMeldRowId, type: meldType, tiles: sortedMeld });
+                            for (const t of sortedMeld) {
+                                if (hTiles.some(h => h.id === t.id)) allSteps.push({ action: 'place_from_hand', tileId: t.id, fromLineId: null, toLineId: newMeldRowId, type: meldType, label: 'Nouveau meld' });
+                                else { const f = fList.find(cf => cf.tile.id === t.id); allSteps.push({ action: 'move_from_board_to_line', tileId: t.id, fromLineId: f.rowId, toLineId: newMeldRowId, type: meldType, label: 'Extraction tuile' }); }
+                            }
+                        }
+                    });
+                }
+
+                // G4 : Récupération du joker
+                for (let r = 0; r < curRows.length; r++) {
+                    const R = curRows[r];
+                    const jokersInR = R.tiles.filter(t => t.isJoker);
+                    if (jokersInR.length !== 1) continue;
+                    const jTile = jokersInR[0], normals = R.tiles.filter(t => !t.isJoker);
+                    for (let i = 0; i < curHand.length; i++) {
+                        const h = curHand[i];
+                        if (h.isJoker) continue;
+                        if (R.type === 'run') {
+                            if (h.color !== normals[0].color || !isValidMeldFast([...normals, h], 'run')) continue;
+                        } else if (R.type === 'group') {
+                            if (h.value !== normals[0].value || normals.some(t => t.color === h.color) || !isValidMeldFast([...normals, h], 'group')) continue;
+                        } else continue;
+
+                        const remH = curHand.filter(t => t.id !== h.id);
+                        let rep = null;
+                        for (let a = 0; a < remH.length; a++) {
+                            for (let b = a + 1; b < remH.length; b++) {
+                                const mt = detectTypeFast([jTile, remH[a], remH[b]]);
+                                if (mt) {
+                                    const pts = h.value + handTileVal(remH[a]) + handTileVal(remH[b]);
+                                    if (!rep || pts > rep.pts) rep = { opt: 'a', h1: remH[a], h2: remH[b], mt, pts, placed: 3, usesHandJoker: remH[a].isJoker || remH[b].isJoker };
+                                }
+                            }
+                        }
+                        if (!rep) {
+                            for (let a = 0; a < remH.length; a++) {
+                                for (let f of freeTiles) {
+                                    if (f.rowId === R.id) continue;
+                                    const mt = detectTypeFast([jTile, remH[a], f.tile]);
+                                    if (mt) {
+                                        const pts = h.value + handTileVal(remH[a]);
+                                        if (!rep || pts > rep.pts) rep = { opt: 'b', h1: remH[a], f, mt, pts, placed: 2, usesHandJoker: remH[a].isJoker };
+                                    }
+                                }
+                            }
+                        }
+                        if (!rep) {
+                            for (let a = 0; a < remH.length; a++) {
+                                for (let R2 of curRows) {
+                                    if (R2.id === R.id || R2.tiles.some(t => t.isJoker)) continue;
+                                    if (isValidMeldFast([...R2.tiles, jTile, remH[a]], R2.type)) {
+                                        const pts = h.value + handTileVal(remH[a]);
+                                        if (!rep || pts > rep.pts) rep = { opt: 'c', h1: remH[a], R2, pts, placed: 2, usesHandJoker: remH[a].isJoker };
+                                    }
+                                }
+                            }
+                        }
+                        if (!rep) continue;
+                        candidates.push({
+                            placedCount: rep.placed,
+                            points: rep.pts,
+                            usesHandJoker: !!rep.usesHandJoker,
+                            execute() {
+                                curHand.splice(curHand.findIndex(t => t.id === h.id), 1);
+                                curHand.splice(curHand.findIndex(t => t.id === rep.h1.id), 1);
+                                R.tiles = R.tiles.filter(t => t.id !== jTile.id);
+                                R.tiles.push(h);
+                                if (R.type === 'run') R.tiles.sort((x, y) => x.value - y.value);
+                                allSteps.push({ action: 'place_from_hand', tileId: h.id, fromLineId: null, toLineId: R.id, type: R.type, label: 'Remplacement joker' });
+                                if (rep.opt === 'a') {
+                                    curHand.splice(curHand.findIndex(t => t.id === rep.h2.id), 1);
+                                    const nId = nextRowId(), nt = [jTile, rep.h1, rep.h2];
+                                    if (rep.mt === 'run') nt.sort((x, y) => x.value - y.value);
+                                    curRows.push({ id: nId, type: rep.mt, tiles: nt });
+                                    allSteps.push({ action: 'move_from_board_to_line', tileId: jTile.id, fromLineId: R.id, toLineId: nId, type: rep.mt, label: 'Déplacement joker' });
+                                    allSteps.push({ action: 'place_from_hand', tileId: rep.h1.id, fromLineId: null, toLineId: nId, type: rep.mt, label: 'Nouveau meld' });
+                                    allSteps.push({ action: 'place_from_hand', tileId: rep.h2.id, fromLineId: null, toLineId: nId, type: rep.mt, label: 'Nouveau meld' });
+                                } else if (rep.opt === 'b') {
+                                    const f = rep.f;
+                                    const fR = curRows.find(rf => rf.id === f.rowId);
+                                    if (f.kind === 'mid') {
+                                        const splitRowId = nextRowId();
+                                        const toMove = fR.tiles.filter(t => t.value > f.tile.value).sort((x, y) => x.value - y.value);
+                                        fR.tiles = fR.tiles.filter(t => t.value < f.tile.value);
+                                        curRows.push({ id: splitRowId, type: 'run', tiles: toMove });
+                                        for (const m of toMove) allSteps.push({ action: 'move_from_board_to_line', tileId: m.id, fromLineId: fR.id, toLineId: splitRowId, type: 'run', label: 'Scission suite' });
+                                    } else {
+                                        fR.tiles = fR.tiles.filter(t => t.id !== f.tile.id);
+                                    }
+                                    const nId = nextRowId(), nt = [jTile, rep.h1, f.tile];
+                                    if (rep.mt === 'run') nt.sort((x, y) => x.value - y.value);
+                                    curRows.push({ id: nId, type: rep.mt, tiles: nt });
+                                    allSteps.push({ action: 'move_from_board_to_line', tileId: jTile.id, fromLineId: R.id, toLineId: nId, type: rep.mt, label: 'Déplacement joker' });
+                                    allSteps.push({ action: 'place_from_hand', tileId: rep.h1.id, fromLineId: null, toLineId: nId, type: rep.mt, label: 'Nouveau meld' });
+                                    allSteps.push({ action: 'move_from_board_to_line', tileId: f.tile.id, fromLineId: f.rowId, toLineId: nId, type: rep.mt, label: 'Extraction tuile' });
+                                } else if (rep.opt === 'c') {
+                                    rep.R2.tiles.push(rep.h1, jTile);
+                                    allSteps.push({ action: 'place_from_hand', tileId: rep.h1.id, fromLineId: null, toLineId: rep.R2.id, type: rep.R2.type, label: 'Ajout' });
+                                    allSteps.push({ action: 'move_from_board_to_line', tileId: jTile.id, fromLineId: R.id, toLineId: rep.R2.id, type: rep.R2.type, label: 'Déplacement joker' });
+                                }
+                            }
+                        });
+                    }
+                }
+
+                // G3 : énumération des extractions
+
+                for (let i = 0; i < curHand.length; i++) {
+                    for (let j = i + 1; j < curHand.length; j++) {
+                        for (let k = 0; k < freeTiles.length; k++) addG3([curHand[i], curHand[j]], [freeTiles[k]]);
+                    }
+                    for (let p = 0; p < freeTiles.length; p++) {
+                        for (let q = p + 1; q < freeTiles.length; q++) {
+                            const f1 = freeTiles[p], f2 = freeTiles[q];
+                            if (f1.rowId === f2.rowId && !(f1.rowLen >= 5 && ((f1.kind === 'min' && f2.kind === 'max') || (f1.kind === 'max' && f2.kind === 'min')))) continue;
+                            addG3([curHand[i]], [f1, f2]);
+                        }
+                    }
+                }
+
+                let bestCand = null;
+                for (const c of candidates) {
+                    if (!bestCand) { bestCand = c; continue; }
+                    if (c.placedCount !== bestCand.placedCount) {
+                        if (c.placedCount > bestCand.placedCount) bestCand = c;
+                    } else if (!!c.usesHandJoker !== !!bestCand.usesHandJoker) {
+                        if (!c.usesHandJoker) bestCand = c;
+                    } else if (c.points > bestCand.points) {
+                        bestCand = c;
+                    }
+                }
+                if (!bestCand) break;
+                bestCand.execute();
+            }
+
+            for (const r of curRows) { if (!detectTypeFast(r.tiles)) return { steps: [], placed: 0, points: 0 }; }
+            if (!checkJokerRuleR11(allSteps, board, hand, true)) return { steps: [], placed: 0, points: 0 };
+            const placedIds = new Set(allSteps.filter(s => s.action === 'place_from_hand').map(s => s.tileId));
+            const points = hand.filter(t => placedIds.has(t.id)).reduce((sum, t) => sum + (t.isJoker ? 30 : t.value), 0);
+            const remainingPoints = hand.filter(t => !placedIds.has(t.id)).reduce((sum, t) => sum + (t.isJoker ? 30 : t.value), 0);
+            return { steps: allSteps, placed: placedIds.size, points, remainingPoints };
+        }
+
+        const zT = Array.from({ length: NUM_TILE_TYPES }, () => []), zH = Array.from({ length: NUM_TILE_TYPES }, () => []);
+        (function() {
+            let s = 0x853c49e6;
+            function n() { s = (s + 0x6D2B79F5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return (t ^ (t >>> 14)) | 0; }
+            for (let t = 0; t < NUM_TILE_TYPES; t++) {
+                zT[t] = Array.from({ length: 16 }, () => [n(), n()]); zT[t][0] = [0, 0];
+                zH[t] = Array.from({ length: 16 }, () => [n(), n()]); zH[t][0] = [0, 0];
+            }
+        })();
+        const splitPool = Array.from({ length: 64 }, () => new Int8Array(6));
         function solveWorker(hand, currentBoard, isOpened, options = {}) {
+            if (options.tacticalOnly === true && isOpened) {
+                const tac = findTacticalMoves(hand, currentBoard, options);
+                return { steps: tac.steps, status: tac.steps.length ? 'ok' : 'no_moves', reason: null, source: 'tactical', liveHandTotal: 0, optimal: false, phase: 0, remainingPoints: 0, flexibility: 0 };
+            }
+            const poolCount = (typeof options.poolCount === 'number') ? options.poolCount : null;
             const profile = options.profile || 'expert';
             const aiStyle = options.aiStyle || 'play_now';
-            const budgetMs = Math.min(options.budgetMs || options.timeBudget || 1500, 2000);
+            const budgetMs = options.budgetMs || options.timeBudget || 1500;
             const opponentHandCount = options.opponentHandCount !== undefined ? options.opponentHandCount : 14;
-            const isEndGameUrgent = (opponentHandCount <= 4);
+            const isEndGameUrgent = (opponentHandCount <= 4) || (poolCount !== null && poolCount === 0);
             const allowStrategicHolds = (aiStyle === 'strategic') && !options.forcePlay;
+            const holdPossible = allowStrategicHolds && profile === 'expert' && hand.some(t => t.isJoker) && opponentHandCount >= 8 && (poolCount === null || poolCount > 10);
             const startTime = Date.now();
             let nodeCount = 0;
             let candidatesEvaluated = 0;
@@ -4091,7 +4379,7 @@
             if (!isOpened) { // R6: Première pose d'au moins 30 points
                 const openMelds = solveOpeningInternal(hand, { profile, dumpUrgent: isEndGameUrgent, budgetMs });
                 if (openMelds.length === 0) {
-                    return { steps: [], solutionMelds: [], isOpening: true, score: 0, status: 'no_moves' };
+                    return { steps: [], solutionMelds: [], isOpening: true, score: 0, status: 'no_moves', source: null, remainingPoints: 0, flexibility: 0 };
                 }
 
                 // Stratégie Expert officielle R8 : Temporisation déterministe (sans Math.random)
@@ -4105,7 +4393,7 @@
                         for (let t of om.meld.types) remCounts[t] -= om.meld.counts[t];
                     }
                     if (hasTwoDisjointNaturalMelds(remCounts)) {
-                        return { steps: [], solutionMelds: [], isOpening: true, score: 0, status: 'hold_back', reason: 'hold_back', timedOut: false, candidatesEvaluated: 0, filteredByR11: 0 };
+                        return { steps: [], solutionMelds: [], isOpening: true, score: 0, status: 'hold_back', reason: 'hold_back', timedOut: false, candidatesEvaluated: 0, filteredByR11: 0, source: null, remainingPoints: 0, flexibility: 0 };
                     }
                 }
 
@@ -4113,7 +4401,7 @@
                 candidatesEvaluated++;
                 if (!checkJokerRuleR11(steps, currentBoard, hand, false)) {
                     filteredByR11++;
-                    return { steps: [], solutionMelds: [], isOpening: true, score: 0, status: 'no_moves', reason: 'no_legal_move', timedOut: false, candidatesEvaluated, filteredByR11 };
+                    return { steps: [], solutionMelds: [], isOpening: true, score: 0, status: 'no_moves', reason: 'no_legal_move', timedOut: false, candidatesEvaluated, filteredByR11, source: null, remainingPoints: 0, flexibility: 0 };
                 }
 
                 const totalScore = openMelds.reduce((s, m) => s + m.meld.score, 0);
@@ -4126,7 +4414,10 @@
                     reason: null,
                     timedOut: false,
                     candidatesEvaluated,
-                    filteredByR11
+                    filteredByR11,
+                    remainingPoints: 0,
+                    flexibility: 0,
+                    source: null
                 };
             }
 
@@ -4150,9 +4441,9 @@
                     candidatesEvaluated++;
                     if (checkJokerRuleR11(directSteps, currentBoard, hand, isOpened)) {
                         if (shouldMissDirect) {
-                            return { steps: [], solutionMelds: [], isOpening: false, score: 0, status: 'no_moves', reason: 'random_miss', timedOut: false, candidatesEvaluated, filteredByR11 };
+                            return { steps: [], solutionMelds: [], isOpening: false, score: 0, status: 'no_moves', reason: 'random_miss', timedOut: false, candidatesEvaluated, filteredByR11, source: null, remainingPoints: 0, flexibility: 0 };
                         }
-                        return { steps: directSteps, solutionMelds: [], isOpening: false, score: 0, status: 'ok', reason: null, timedOut: false, candidatesEvaluated, filteredByR11 };
+                        return { steps: directSteps, solutionMelds: [], isOpening: false, score: 0, status: 'ok', reason: null, timedOut: false, candidatesEvaluated, filteredByR11, source: null, remainingPoints: 0, flexibility: 0 };
                     } else {
                         filteredByR11++;
                     }
@@ -4165,231 +4456,407 @@
                     if (checkJokerRuleR11(steps, currentBoard, hand, isOpened)) {
                         const shouldMissPure = canMiss && (Math.random() < 0.3);
                         if (shouldMissPure) {
-                            return { steps: [], solutionMelds: [], isOpening: false, score: 0, status: 'no_moves', reason: 'random_miss', timedOut: false, candidatesEvaluated, filteredByR11 };
+                            return { steps: [], solutionMelds: [], isOpening: false, score: 0, status: 'no_moves', reason: 'random_miss', timedOut: false, candidatesEvaluated, filteredByR11, source: null, remainingPoints: 0, flexibility: 0 };
                         }
-                        return { steps, solutionMelds: pureOpen, isOpening: false, score: 0, status: 'ok', reason: null, timedOut: false, candidatesEvaluated, filteredByR11 };
+                        return { steps, solutionMelds: pureOpen, isOpening: false, score: 0, status: 'ok', reason: null, timedOut: false, candidatesEvaluated, filteredByR11, source: null, remainingPoints: 0, flexibility: 0 };
                     } else {
                         filteredByR11++;
                     }
                 }
-                return { steps: [], solutionMelds: [], isOpening: false, score: 0, status: 'no_moves', reason: 'no_legal_move', timedOut: false, candidatesEvaluated, filteredByR11 };
+                return { steps: [], solutionMelds: [], isOpening: false, score: 0, status: 'no_moves', reason: 'no_legal_move', timedOut: false, candidatesEvaluated, filteredByR11, source: null, remainingPoints: 0, flexibility: 0 };
             }
 
-            // 3. SOLVEUR BRANCH & BOUND (Normal & Expert)
-            const tableTiles = currentBoard.flatMap(r => r.tiles);
-            const tableCounts = tilesToCounts(tableTiles);
+            // 3. SOLVEUR MULTI-PALIERS (Normal & Expert)
+            let heldJokerCount = 0;
+            let tactical = findTacticalMoves(hand, currentBoard, { endGame: isEndGameUrgent });
+            if (holdPossible && tactical && tactical.placed <= 2 && tactical.steps.some(s => s.action === 'place_from_hand' && hand.find(t => t.id === s.tileId)?.isJoker)) {
+                heldJokerCount++;
+                tactical = findTacticalMoves(hand.filter(t => !t.isJoker), currentBoard, { endGame: isEndGameUrgent });
+            }
+            if (tactical && tactical.placed > 0) {
+                const tacPlacedIds = new Set(tactical.steps.filter(s => s.action === 'place_from_hand').map(s => s.tileId));
+                tactical.remainingPoints = hand.filter(t => !tacPlacedIds.has(t.id)).reduce((sum, t) => sum + (t.isJoker ? 30 : t.value), 0);
+            }
             const handCounts = tilesToCounts(hand);
+            const tableCounts = tilesToCounts(currentBoard.flatMap(r => r.tiles));
+            const totC = new Uint8Array(NUM_TILE_TYPES), isLive = new Uint8Array(NUM_TILE_TYPES);
+            for (let i = 0; i < NUM_TILE_TYPES; i++) totC[i] = tableCounts[i] + handCounts[i];
+            let liveHandTotal = 0;
+            for (let t = 0; t < NUM_TILE_TYPES; t++) {
+                if (handCounts[t] === 0) continue;
+                let alive = false;
+                for (let idx of CATALOG_BY_TYPE[t]) {
+                    const m = MELD_CATALOG[idx];
+                    if (m.types.every(k => totC[k] >= m.counts[k])) { alive = true; break; }
+                }
+                if (alive) { isLive[t] = 1; liveHandTotal += handCounts[t]; }
+            }
+            const maxDist = hand.some(h => h.isJoker) ? 3 : 2, relTile = new Uint8Array(52);
+            for (let t = 0; t < 52; t++) {
+                if (!isLive[t]) continue;
+                const v = (t % 13) + 1, c = Math.floor(t / 13);
+                for (let i = 0; i < 4; i++) relTile[i * 13 + (v - 1)] = 1;
+                for (let d = Math.max(1, v - maxDist); d <= Math.min(13, v + maxDist); d++) relTile[c * 13 + (d - 1)] = 1;
+            }
+            const ring1 = currentBoard.filter(r => r.tiles.some(t => t.isJoker || relTile[tileToType(t)]));
+            const ring1Set = new Set(ring1), dist1Tile = new Uint8Array(52);
+            for (const r of ring1) for (const t1 of r.tiles) {
+                if (t1.isJoker) continue;
+                const v = t1.value, c = COLORS.indexOf(t1.color);
+                for (let i = 0; i < 4; i++) dist1Tile[i * 13 + (v - 1)] = 1;
+                if (v > 1) dist1Tile[c * 13 + (v - 2)] = 1; dist1Tile[c * 13 + (v - 1)] = 1; if (v < 13) dist1Tile[c * 13 + v] = 1;
+            }
+            const ring2 = currentBoard.filter(r => ring1Set.has(r) || r.tiles.some(t => !t.isJoker && dist1Tile[tileToType(t)]));
+            const liveTypes = [];
+            for (let t = 0; t < NUM_TILE_TYPES; t++) if (isLive[t]) liveTypes.push(t);
+            const ring1Ids = ring1.map(r => r.id), ring2Ids = ring2.map(r => r.id);
+            if (options.liveOnly === true) {
+                return { status: 'ok', steps: [], liveHandTotal, liveTypes, ring1Ids, ring2Ids };
+            }
+            const withDebug = (res) => options.debugInfo === true ? { ...res, liveTypes, ring1Ids, ring2Ids } : res;
+            function runBnbOn(rowsSubset, deadline) {
+                if (Date.now() >= deadline) return { candidateSolutions: [], bestHandPlaced: 0, maxPlacedWithoutHandJoker: 0, optimal: false, timedOut: true };
+                const tableTiles = rowsSubset.flatMap(r => r.tiles);
+                const tableCounts = tilesToCounts(tableTiles);
+                const tableC = new Uint8Array(tableCounts);
+                const handC = new Uint8Array(handCounts);
+                const memo = new Map();
+            const chosen = [];
             let candidateSolutions = [];
             let bestHandPlaced = 0;
             let maxPlacedWithoutHandJoker = 0;
-            const memo = new Map();
+            let optimal = false;
+                let timedOut = false;
+            let zHash1 = 0, zHash2 = 0;
+            for (let k = 0; k < NUM_TILE_TYPES; k++) {
+                zHash1 ^= zT[k][tableC[k]][0] ^ zH[k][handC[k]][0];
+                zHash2 ^= zT[k][tableC[k]][1] ^ zH[k][handC[k]][1];
+            }
 
-            function bnb(tableC, handC, tableLeft, handLeft, placedSoFar, chosen) {
-                if (timedOut) return;
-                if ((++nodeCount & 255) === 0) {
-                    if (Date.now() - startTime > budgetMs) { timedOut = true; return; }
+            function saveCandidate(placedSoFar, handJokers) {
+                const cand = chosen.map(item => {
+                    const m = item.meld;
+                    const fromTable = new Uint8Array(NUM_TILE_TYPES);
+                    const fromHand = new Uint8Array(NUM_TILE_TYPES);
+                    if (item.d >= 0) {
+
+                        const split = splitPool[item.d];
+                        for (let j = 0; j < m.types.length; j++) {
+                            const k = m.types[j], tT = split[j];
+                            fromTable[k] = tT; fromHand[k] = m.counts[k] - tT;
+                        }
+                    } else {
+                        for (let k of m.types) fromHand[k] = m.counts[k];
+                    }
+                    return { meld: m, fromTable, fromHand };
+                });
+                if (candidateSolutions.length < 300) candidateSolutions.push({ cand, handPlaced: placedSoFar, handJokers });
+                else {
+                    let minIdx = -1, minPlaced = placedSoFar;
+                    for (let idx = 0; idx < candidateSolutions.length; idx++) {
+                        if (candidateSolutions[idx].handPlaced < minPlaced) { minPlaced = candidateSolutions[idx].handPlaced; minIdx = idx; }
+                    }
+                    if (minIdx !== -1) candidateSolutions[minIdx] = { cand, handPlaced: placedSoFar, handJokers };
                 }
-                if (placedSoFar + handLeft < Math.max(1, bestHandPlaced - (candidateSolutions.length >= 300 ? 0 : 2))) return;
-                let kStr = "";
-                for (let i = 0; i < NUM_TILE_TYPES; i++) kStr += String.fromCharCode(48 + tableC[i] * 3 + handC[i]);
-                if (memo.has(kStr) && memo.get(kStr) >= placedSoFar) return;
-                memo.set(kStr, placedSoFar);
+            }
+
+            function bnb(tableLeft, liveLeft, placedSoFar) {
+                if (timedOut || optimal) return;
+                if ((++nodeCount & 127) === 0 && Date.now() > deadline) { timedOut = true; return; }
+                if (placedSoFar + liveLeft < Math.max(1, bestHandPlaced - (candidateSolutions.length >= 300 ? 0 : 2))) return;
+                const memoKey = zHash1 + ':' + zHash2;
+                if (memo.has(memoKey) && memo.get(memoKey) >= placedSoFar) return;
+                if (memo.size > 300000) memo.clear();
+                memo.set(memoKey, placedSoFar);
 
                 if (tableLeft > 0) {
                     let t = 0;
                     while (t < NUM_TILE_TYPES && tableC[t] === 0) t++;
-                    if (t >= NUM_TILE_TYPES) { branchHand(handC, handLeft, placedSoFar, chosen); return; }
-                    const candidates = CATALOG_BY_TYPE[t];
-                    const opts = [];
-                    for (let i = 0; i < candidates.length; i++) {
-                        const meld = MELD_CATALOG[candidates[i]];
-                        let canForm = true;
-                        for (let k of meld.types) { if (tableC[k] + handC[k] < meld.counts[k]) { canForm = false; break; } }
-                        if (!canForm) continue;
-                        let allocs = [{ fromTable: new Uint8Array(NUM_TILE_TYPES), fromHand: new Uint8Array(NUM_TILE_TYPES), tTaken: 0, hTaken: 0 }];
+                    if (t >= NUM_TILE_TYPES) { branchHand(liveLeft, placedSoFar); return; }
+                    const validMelds = [];
+                    for (let idx of CATALOG_BY_TYPE[t]) {
+                        const meld = MELD_CATALOG[idx];
+                        let can = true, maxH = 0;
                         for (let k of meld.types) {
-                            const req = meld.counts[k];
-                            const nAllocs = [];
-                            for (let al of allocs) {
-                                const maxT = Math.min(req, tableC[k]);
-                                const minT = (k === t) ? Math.max(1, req - handC[k]) : Math.max(0, req - handC[k]);
-                                const choices = new Set([maxT, minT]);
-                                for (let takeT of choices) {
-                                    const takeH = req - takeT;
-                                    const fT = new Uint8Array(al.fromTable); fT[k] = takeT;
-                                    const fH = new Uint8Array(al.fromHand); fH[k] = takeH;
-                                    nAllocs.push({ fromTable: fT, fromHand: fH, tTaken: al.tTaken + takeT, hTaken: al.hTaken + takeH });
-                                }
-                            }
-                            allocs = nAllocs;
+                            if (tableC[k] + handC[k] < meld.counts[k]) { can = false; break; }
+                            const minT = (k === t) ? Math.max(1, meld.counts[k] - handC[k]) : Math.max(0, meld.counts[k] - handC[k]);
+                            maxH += meld.counts[k] - minT;
                         }
-                        for (let al of allocs) opts.push({ meld, fromTable: al.fromTable, fromHand: al.fromHand, tTaken: al.tTaken, hTaken: al.hTaken });
+                        if (can) { meld._curMaxH = maxH; validMelds.push(meld); }
                     }
-                    opts.sort((a, b) => b.hTaken - a.hTaken || b.meld.score - a.meld.score || a.meld.id - b.meld.id);
-                    for (let opt of opts) {
-                        if (timedOut) return;
-                        for (let k of opt.meld.types) { tableC[k] -= opt.fromTable[k]; handC[k] -= opt.fromHand[k]; }
-                        chosen.push(opt);
-                        bnb(tableC, handC, tableLeft - opt.tTaken, handLeft - opt.hTaken, placedSoFar + opt.hTaken, chosen);
-                        chosen.pop();
-                        for (let k of opt.meld.types) { tableC[k] += opt.fromTable[k]; handC[k] += opt.fromHand[k]; }
-                        if (timedOut) return;
+                    validMelds.sort((a, b) => b._curMaxH - a._curMaxH || b.score - a.score || a.id - b.id);
+
+                    const depth = chosen.length, curSplit = splitPool[depth];
+                    function tryMeldSplit(meld, pass) {
+                        const mTypes = meld.types, mLen = mTypes.length;
+                        if (pass === 0) {
+                            let tTaken = 0, hTaken = 0;
+                            for (let j = 0; j < mLen; j++) {
+                                const k = mTypes[j], req = meld.counts[k];
+                                const minT = (k === t) ? Math.max(1, req - handC[k]) : Math.max(0, req - handC[k]), h = req - minT;
+                                curSplit[j] = minT; tTaken += minT; hTaken += h;
+                                tableC[k] -= minT; handC[k] -= h;
+                                zHash1 ^= zT[k][tableC[k] + minT][0] ^ zT[k][tableC[k]][0] ^ zH[k][handC[k] + h][0] ^ zH[k][handC[k]][0];
+                                zHash2 ^= zT[k][tableC[k] + minT][1] ^ zT[k][tableC[k]][1] ^ zH[k][handC[k] + h][1] ^ zH[k][handC[k]][1];
+                            }
+                            chosen.push({ meld, d: depth });
+                            bnb(tableLeft - tTaken, liveLeft - hTaken, placedSoFar + hTaken);
+                            chosen.pop();
+                            for (let j = 0; j < mLen; j++) {
+                                const k = mTypes[j], minT = curSplit[j], h = meld.counts[k] - minT;
+                                tableC[k] += minT; handC[k] += h;
+                                zHash1 ^= zT[k][tableC[k]][0] ^ zT[k][tableC[k] - minT][0] ^ zH[k][handC[k]][0] ^ zH[k][handC[k] - h][0];
+                                zHash2 ^= zT[k][tableC[k]][1] ^ zT[k][tableC[k] - minT][1] ^ zH[k][handC[k]][1] ^ zH[k][handC[k] - h][1];
+                            }
+                            return;
+                        }
+                        let hasChoice = false;
+                        for (let k of mTypes) {
+                            if (Math.min(meld.counts[k], tableC[k]) > ((k === t) ? Math.max(1, meld.counts[k] - handC[k]) : Math.max(0, meld.counts[k] - handC[k]))) { hasChoice = true; break; }
+                        }
+                        if (!hasChoice) return;
+                        function rec(idx, tTaken, hTaken, hasOther) {
+                            if (timedOut || optimal) return;
+                            if (idx === mLen) {
+                                if (!hasOther) return;
+                                chosen.push({ meld, d: depth });
+                                bnb(tableLeft - tTaken, liveLeft - hTaken, placedSoFar + hTaken);
+                                chosen.pop();
+                                return;
+                            }
+                            const k = mTypes[idx], req = meld.counts[k];
+                            const maxT = Math.min(req, tableC[k]);
+                            const minT = (k === t) ? Math.max(1, req - handC[k]) : Math.max(0, req - handC[k]);
+                            const h1 = req - minT;
+                            curSplit[idx] = minT;
+                            tableC[k] -= minT; handC[k] -= h1;
+                            zHash1 ^= zT[k][tableC[k] + minT][0] ^ zT[k][tableC[k]][0] ^ zH[k][handC[k] + h1][0] ^ zH[k][handC[k]][0];
+                            zHash2 ^= zT[k][tableC[k] + minT][1] ^ zT[k][tableC[k]][1] ^ zH[k][handC[k] + h1][1] ^ zH[k][handC[k]][1];
+                            rec(idx + 1, tTaken + minT, hTaken + h1, hasOther);
+                            tableC[k] += minT; handC[k] += h1;
+                            zHash1 ^= zT[k][tableC[k]][0] ^ zT[k][tableC[k] - minT][0] ^ zH[k][handC[k]][0] ^ zH[k][handC[k] - h1][0];
+                            zHash2 ^= zT[k][tableC[k]][1] ^ zT[k][tableC[k] - minT][1] ^ zH[k][handC[k]][1] ^ zH[k][handC[k] - h1][1];
+                            if (maxT > minT) {
+                                const h2 = req - maxT;
+                                curSplit[idx] = maxT;
+                                tableC[k] -= maxT; handC[k] -= h2;
+                                zHash1 ^= zT[k][tableC[k] + maxT][0] ^ zT[k][tableC[k]][0] ^ zH[k][handC[k] + h2][0] ^ zH[k][handC[k]][0];
+                                zHash2 ^= zT[k][tableC[k] + maxT][1] ^ zT[k][tableC[k]][1] ^ zH[k][handC[k] + h2][1] ^ zH[k][handC[k]][1];
+                                rec(idx + 1, tTaken + maxT, hTaken + h2, true);
+                                tableC[k] += maxT; handC[k] += h2;
+                                zHash1 ^= zT[k][tableC[k]][0] ^ zT[k][tableC[k] - maxT][0] ^ zH[k][handC[k]][0] ^ zH[k][handC[k] - h2][0];
+                                zHash2 ^= zT[k][tableC[k]][1] ^ zT[k][tableC[k] - maxT][1] ^ zH[k][handC[k]][1] ^ zH[k][handC[k] - h2][1];
+                            }
+                        }
+                        rec(0, 0, 0, false);
                     }
+                    for (let i = 0; i < validMelds.length; i++) { if (timedOut || optimal) return; tryMeldSplit(validMelds[i], 0); }
+                    for (let i = 0; i < validMelds.length; i++) { if (timedOut || optimal) return; tryMeldSplit(validMelds[i], 1); }
                     return;
                 }
-                branchHand(handC, handLeft, placedSoFar, chosen);
+                branchHand(liveLeft, placedSoFar);
             }
 
-            function branchHand(handC, handLeft, placedSoFar, chosen) {
-                if (timedOut) return;
-                if ((++nodeCount & 255) === 0 && Date.now() - startTime > budgetMs) { timedOut = true; return; }
+            function branchHand(liveLeft, placedSoFar) {
+                if (timedOut || optimal) return;
+                if ((++nodeCount & 127) === 0 && Date.now() > deadline) { timedOut = true; return; }
                 if (placedSoFar >= 1) {
-                    const handJokers = chosen.reduce((acc, cm) => acc + cm.fromHand[TILE_TYPE_JOKER], 0);
-                    if (handJokers === 0 && placedSoFar > maxPlacedWithoutHandJoker) {
-                        maxPlacedWithoutHandJoker = placedSoFar;
+                    let candHandJokers = 0;
+                    for (let cItem of chosen) {
+                        if (cItem.d >= 0) {
+                            const jIdx = cItem.meld.types.indexOf(TILE_TYPE_JOKER);
+                            if (jIdx !== -1) candHandJokers += cItem.meld.counts[TILE_TYPE_JOKER] - splitPool[cItem.d][jIdx];
+                        } else if (cItem.meld.counts[TILE_TYPE_JOKER]) candHandJokers += cItem.meld.counts[TILE_TYPE_JOKER];
                     }
+                    if (candHandJokers === 0 && placedSoFar > maxPlacedWithoutHandJoker) maxPlacedWithoutHandJoker = placedSoFar;
                     if (placedSoFar > bestHandPlaced) {
                         bestHandPlaced = placedSoFar;
                         const minAllowed = Math.max(1, bestHandPlaced - 2);
                         candidateSolutions = candidateSolutions.filter(c => c.handPlaced >= minAllowed);
+                        if (!holdPossible && bestHandPlaced === liveHandTotal && liveHandTotal > 0) optimal = true;
                     }
-                    if (placedSoFar >= Math.max(1, bestHandPlaced - 2)) {
-                        if (candidateSolutions.length < 300) {
-                            const cand = chosen.map(m => ({ meld: m.meld, fromTable: new Uint8Array(m.fromTable), fromHand: new Uint8Array(m.fromHand) }));
-                            candidateSolutions.push({ cand, handPlaced: placedSoFar, handJokers });
-                        } else {
-                            let minIdx = -1, minPlaced = placedSoFar;
-                            for (let idx = 0; idx < candidateSolutions.length; idx++) {
-                                if (candidateSolutions[idx].handPlaced < minPlaced) {
-                                    minPlaced = candidateSolutions[idx].handPlaced;
-                                    minIdx = idx;
-                                }
-                            }
-                            if (minIdx !== -1) {
-                                const cand = chosen.map(m => ({ meld: m.meld, fromTable: new Uint8Array(m.fromTable), fromHand: new Uint8Array(m.fromHand) }));
-                                candidateSolutions[minIdx] = { cand, handPlaced: placedSoFar, handJokers };
-                            }
-                        }
-                    }
+                    if (placedSoFar >= Math.max(1, bestHandPlaced - 2)) saveCandidate(placedSoFar, candHandJokers);
+                    if (optimal) return;
                 }
-                if (handLeft < RULES.minMeldLength || placedSoFar + handLeft < Math.max(1, bestHandPlaced - (candidateSolutions.length >= 300 ? 0 : 2))) return;
+                if (liveLeft < RULES.minMeldLength || placedSoFar + liveLeft < Math.max(1, bestHandPlaced - (candidateSolutions.length >= 300 ? 0 : 2))) return;
                 let t = 0; while (t < NUM_TILE_TYPES && handC[t] === 0) t++;
                 if (t >= NUM_TILE_TYPES) return;
-                const candidates = CATALOG_BY_MIN_TYPE[t];
-                for (let i = 0; i < candidates.length; i++) {
-                    if (timedOut) return;
-                    const meld = MELD_CATALOG[candidates[i]];
-                    if (meld.length > handLeft) continue;
+                for (let idx of CATALOG_BY_MIN_TYPE[t]) {
+                    if (timedOut || optimal) return;
+                    const meld = MELD_CATALOG[idx];
+                    if (meld.length > liveLeft) continue;
                     let can = true;
                     for (let k of meld.types) { if (handC[k] < meld.counts[k]) { can = false; break; } }
                     if (!can) continue;
-                    const fromTable = new Uint8Array(NUM_TILE_TYPES);
-                    const fromHand = new Uint8Array(NUM_TILE_TYPES);
-                    for (let k of meld.types) { fromHand[k] = meld.counts[k]; handC[k] -= meld.counts[k]; }
-                    chosen.push({ meld, fromTable, fromHand });
-                    branchHand(handC, handLeft - meld.length, placedSoFar + meld.length, chosen);
+                    for (let k of meld.types) handC[k] -= meld.counts[k];
+                    chosen.push({ meld, d: -1 });
+                    branchHand(liveLeft - meld.length, placedSoFar + meld.length);
                     chosen.pop();
                     for (let k of meld.types) handC[k] += meld.counts[k];
-                    if (timedOut) return;
+                    if (timedOut || optimal) return;
                 }
                 const saved = handC[t];
                 handC[t] = 0;
-                if (!timedOut) branchHand(handC, handLeft - saved, placedSoFar, chosen);
+                const skipLive = isLive[t] ? saved : 0;
+                if (!timedOut && !optimal) branchHand(liveLeft - skipLive, placedSoFar);
                 handC[t] = saved;
             }
 
-            bnb(new Uint8Array(tableCounts), new Uint8Array(handCounts), tableTiles.length, hand.length, 0, []);
+                bnb(tableTiles.length, liveHandTotal, 0);
+                return { candidateSolutions, bestHandPlaced, maxPlacedWithoutHandJoker, optimal, timedOut };
+            }
+
+            let candidateSolutions = [];
+            if (!options.skipBnb) {
+                const r1 = runBnbOn(ring1, startTime + 0.4 * budgetMs);
+                for (const c of r1.candidateSolutions) candidateSolutions.push({ ...c, rowsSubset: ring1, phase: 1 });
+                if (r1.timedOut) timedOut = true;
+                let skipNext = r1.optimal, r2 = null;
+                if (!skipNext && ring2.length !== ring1.length) {
+                    r2 = runBnbOn(ring2, startTime + 0.75 * budgetMs);
+                    for (const c of r2.candidateSolutions) candidateSolutions.push({ ...c, rowsSubset: ring2, phase: 2 });
+                    if (r2.timedOut) timedOut = true; if (r2.optimal) skipNext = true;
+                }
+                if (!skipNext && (currentBoard.length !== (r2 ? ring2.length : ring1.length) || (r2 ? r2.timedOut : r1.timedOut))) {
+                    const r3 = runBnbOn(currentBoard, startTime + budgetMs);
+                    for (const c of r3.candidateSolutions) candidateSolutions.push({ ...c, rowsSubset: currentBoard, phase: 3 });
+                    if (r3.timedOut) timedOut = true;
+                }
+            }
 
             // 4. ÉVALUATION STRATÉGIQUE DES CANDIDATS
             const scoredCandidates = [];
             for (let item of candidateSolutions) {
                 const cand = item.cand;
-                let score = 0, handPlaced = item.handPlaced, handJokers = item.handJokers, highValPlaced = 0;
+                let handPlaced = item.handPlaced, handJokers = item.handJokers, highValPlaced = 0;
                 for (let cm of item.cand) {
                     for (let t of cm.meld.types) {
                         if (cm.fromHand[t] > 0 && t < 52 && (t % 13) >= 9) highValPlaced += cm.fromHand[t];
                     }
                 }
                 const remainingCount = hand.length - handPlaced;
-                if (remainingCount === 0) score += ScoreWeights.win;
-                score += handPlaced * ScoreWeights.playTiles;
-
+                const remHandCounts = new Uint8Array(handCounts);
+                for (let cm of cand) {
+                    for (let t of cm.meld.types) remHandCounts[t] -= cm.fromHand[t];
+                }
+                const remJokers = remHandCounts[TILE_TYPE_JOKER];
+                let remainingPoints = remJokers * 30, flexibility = remJokers;
+                for (let t = 0; t < 52; t++) {
+                    const cnt = remHandCounts[t];
+                    if (cnt === 0) continue;
+                    const v = (t % 13) + 1, c = Math.floor(t / 13);
+                    remainingPoints += cnt * v;
+                    let hasPartner = false;
+                    for (let c2 = 0; c2 < 4; c2++) {
+                        if (c2 !== c && remHandCounts[c2 * 13 + (v - 1)] > 0) { hasPartner = true; break; }
+                    }
+                    if (!hasPartner) {
+                        for (let dv of [-2, -1, 1, 2]) {
+                            const v2 = v + dv;
+                            if (v2 >= 1 && v2 <= 13 && remHandCounts[c * 13 + (v2 - 1)] > 0) { hasPartner = true; break; }
+                        }
+                    }
+                    if (hasPartner) flexibility += cnt;
+                }
+                let expertScore = 0;
                 if (profile === 'expert') {
                     if (isEndGameUrgent) {
-                        // Règle Expert fin de partie : Débarrasser les Jokers et grosses valeurs
-                        if (handJokers > 0) score += ScoreWeights.dumpJoker * handJokers;
-                        score += highValPlaced * 400;
+                        if (handJokers > 0) expertScore += ScoreWeights.dumpJoker * handJokers;
+                        expertScore += highValPlaced * 400;
                     } else if (allowStrategicHolds) {
-                        // Règle Expert : Garder la 4e tuile d'une série ou d'une suite
                         const hasFourTileMelds = cand.some(cm => cm.meld.isFourTile && cm.fromHand[cm.meld.minType] > 0);
-                        if (!hasFourTileMelds) score += ScoreWeights.holdFourthTileBonus;
+                        if (!hasFourTileMelds) expertScore += ScoreWeights.holdFourthTileBonus;
                     }
                 }
-                scoredCandidates.push({ cand, score, handPlaced, handJokers, highValPlaced, remainingCount });
+                scoredCandidates.push({ cand, handPlaced, handJokers, remainingCount, remainingPoints, flexibility, expertScore, rowsSubset: item.rowsSubset, phase: item.phase });
             }
 
-            // Tri par nombre de tuiles posées desc, puis par score desc
-            scoredCandidates.sort((a, b) => b.handPlaced - a.handPlaced || b.score - a.score);
+            scoredCandidates.sort((a, b) => {
+                if (isEndGameUrgent) {
+                    if ((a.remainingCount === 0) !== (b.remainingCount === 0)) return a.remainingCount === 0 ? -1 : 1;
+                    if (a.remainingPoints !== b.remainingPoints) return a.remainingPoints - b.remainingPoints;
+                    if (b.handPlaced !== a.handPlaced) return b.handPlaced - a.handPlaced;
+                    return b.expertScore - a.expertScore;
+                }
+                if (b.handPlaced !== a.handPlaced) return b.handPlaced - a.handPlaced;
+                if (b.flexibility !== a.flexibility) return b.flexibility - a.flexibility;
+                if (a.remainingPoints !== b.remainingPoints) return a.remainingPoints - b.remainingPoints;
+                return b.expertScore - a.expertScore;
+            });
 
-            // Partition : candidats sans joker en main vs avec joker en main
-            const noJokerCandidates = scoredCandidates.filter(c => c.handJokers === 0);
-            const jokerCandidates = scoredCandidates.filter(c => c.handJokers > 0);
-
-            // Évaluation prioritaire des candidats sans joker
-            for (let item of noJokerCandidates) {
+            let bnbBest = null;
+            for (let item of scoredCandidates) {
                 candidatesEvaluated++;
-                const steps = buildStepsFromChosenMelds(item.cand, hand, currentBoard);
+                if (holdPossible && item.handJokers > 0 && item.remainingCount > 0 && item.handPlaced <= 2) {
+                    heldJokerCount++;
+                    continue;
+                }
+                const steps = buildStepsFromChosenMelds(item.cand, hand, item.rowsSubset);
                 if (checkJokerRuleR11(steps, currentBoard, hand, isOpened)) {
-                    return {
-                        steps,
-                        solutionMelds: item.cand,
-                        isOpening: false,
-                        score: item.score,
-                        status: 'ok',
-                        reason: null,
-                        timedOut,
-                        candidatesEvaluated,
-                        filteredByR11
-                    };
+                    bnbBest = { steps, solutionMelds: item.cand, score: item.expertScore, handPlaced: item.handPlaced, phase: item.phase, remainingPoints: item.remainingPoints, flexibility: item.flexibility };
+                    break;
                 } else {
                     filteredByR11++;
                 }
             }
 
-            // Évaluation des candidats avec joker
-            let heldJokerCount = 0;
-            for (let item of jokerCandidates) {
-                candidatesEvaluated++;
-                if (allowStrategicHolds && profile === 'expert' && !isEndGameUrgent && item.remainingCount > 0) {
-                    if (opponentHandCount >= 8 && item.handPlaced <= 2) {
-                        heldJokerCount++;
-                        continue;
-                    }
-                }
-                const steps = buildStepsFromChosenMelds(item.cand, hand, currentBoard);
-                if (checkJokerRuleR11(steps, currentBoard, hand, isOpened)) {
-                    return {
-                        steps,
-                        solutionMelds: item.cand,
-                        isOpening: false,
-                        score: item.score,
-                        status: 'ok',
-                        reason: null,
-                        timedOut,
-                        candidatesEvaluated,
-                        filteredByR11
-                    };
+            let preferTactical = false;
+            if (tactical && tactical.placed > 0) {
+                if (!bnbBest) {
+                    preferTactical = true;
+                } else if (isEndGameUrgent) {
+                    preferTactical = (tactical.remainingPoints < bnbBest.remainingPoints);
                 } else {
-                    filteredByR11++;
+                    preferTactical = (tactical.placed > bnbBest.handPlaced);
                 }
+            }
+
+            if (preferTactical) {
+                return withDebug({
+                    steps: tactical.steps,
+                    solutionMelds: [],
+                    isOpening: false,
+                    score: tactical.points,
+                    status: 'ok',
+                    reason: null,
+                    timedOut,
+                    candidatesEvaluated,
+                    filteredByR11,
+                    source: 'tactical',
+                    liveHandTotal,
+                    optimal: tactical.placed === liveHandTotal && liveHandTotal > 0,
+                    phase: 0,
+                    remainingPoints: tactical.remainingPoints,
+                    flexibility: 0
+                });
+            }
+            if (bnbBest) {
+                return withDebug({
+                    steps: bnbBest.steps,
+                    solutionMelds: bnbBest.solutionMelds,
+                    isOpening: false,
+                    score: bnbBest.score,
+                    status: 'ok',
+                    reason: null,
+                    timedOut,
+                    candidatesEvaluated,
+                    filteredByR11,
+                    source: 'bnb',
+                    liveHandTotal,
+                    optimal: bnbBest.handPlaced === liveHandTotal && liveHandTotal > 0,
+                    phase: bnbBest.phase,
+                    remainingPoints: bnbBest.remainingPoints,
+                    flexibility: bnbBest.flexibility
+                });
             }
 
             // 5. REPLI DÉTERMINISTE (FALLBACK)
-            const fallbackSteps = getDeterministicFallback(hand, currentBoard, isOpened);
+            const fallbackHand = holdPossible ? hand.filter(t => !t.isJoker) : hand;
+            const fallbackSteps = getDeterministicFallback(fallbackHand, currentBoard, isOpened);
             if (fallbackSteps && fallbackSteps.length > 0) {
                 candidatesEvaluated++;
                 if (checkJokerRuleR11(fallbackSteps, currentBoard, hand, isOpened)) {
-                    return {
+                    return withDebug({
                         steps: fallbackSteps,
                         solutionMelds: [],
                         isOpening: false,
@@ -4398,18 +4865,24 @@
                         reason: null,
                         timedOut,
                         candidatesEvaluated,
-                        filteredByR11
-                    };
+                        filteredByR11,
+                        source: 'fallback',
+                        liveHandTotal,
+                        optimal: false,
+                        phase: null,
+                        remainingPoints: 0,
+                        flexibility: 0
+                    });
                 } else {
                     filteredByR11++;
                 }
             }
 
             if (heldJokerCount > 0 && candidateSolutions.length > 0) {
-                return { steps: [], solutionMelds: [], isOpening: false, score: 0, status: 'hold_joker', reason: 'hold_joker', timedOut, candidatesEvaluated, filteredByR11 };
+                return withDebug({ steps: [], solutionMelds: [], isOpening: false, score: 0, status: 'hold_joker', reason: 'hold_joker', timedOut, candidatesEvaluated, filteredByR11, source: null, liveHandTotal, optimal: false, phase: null, remainingPoints: 0, flexibility: 0 });
             }
             const noMoveReason = timedOut ? 'timeout_no_candidate' : 'no_legal_move';
-            return { steps: [], solutionMelds: [], isOpening: false, score: 0, status: 'no_moves', reason: noMoveReason, timedOut, candidatesEvaluated, filteredByR11 };
+            return withDebug({ steps: [], solutionMelds: [], isOpening: false, score: 0, status: 'no_moves', reason: noMoveReason, timedOut, candidatesEvaluated, filteredByR11, source: null, liveHandTotal, optimal: false, phase: null, remainingPoints: 0, flexibility: 0 });
         }
 
         self.onmessage = function(e) {
@@ -4445,7 +4918,7 @@
             const blob = new Blob([workerSourceCode], { type: 'application/javascript' });
             metricsWorker = new Worker(URL.createObjectURL(blob));
             metricsWorker.onerror = function(err) {
-                console.error("[METRICS WORKER ERROR]", err);
+                console.error("[WORKER ERROR]", err.message, "line", err.lineno, "col", err.colno);
                 resetMetricsWorker();
             };
             metricsWorker.onmessage = function(e) {
@@ -4472,7 +4945,7 @@
             const blob = new Blob([workerSourceCode], { type: 'application/javascript' });
             backgroundWorker = new Worker(URL.createObjectURL(blob));
             backgroundWorker.onerror = function(err) {
-                console.error("[BACKGROUND WORKER ERROR]", err);
+                console.error("[WORKER ERROR]", err.message, "line", err.lineno, "col", err.colno);
                 for (const [, cb] of pendingWorkerCallbacks.entries()) {
                     cb({ steps: [], status: 'error' });
                 }
@@ -4513,9 +4986,10 @@
             pendingMetricsCallbacks.set(id, (data) => {
                 done(data ? data.result : null);
             });
+            const timeoutMs = options.timeoutMs || Math.max(4000, (options.budgetMs || 1500) + 4000);
             timeoutId = setTimeout(() => {
-                done({ steps: [], status: 'error', message: 'timeout 4s' });
-            }, 4000);
+                done({ steps: [], status: 'error', message: `timeout ${timeoutMs / 1000}s` });
+            }, timeoutMs);
             worker.postMessage({ id, action: 'solve', hand, board, isOpened, options });
         });
     }
@@ -4542,14 +5016,15 @@
                 resolve(res);
             };
             pendingWorkerCallbacks.set(id, done);
+            const timeoutMs = options.timeoutMs || Math.max(4000, (options.budgetMs || 1500) + 4000);
             timeoutId = setTimeout(() => {
-                console.error("[IA TIMEOUT] Le Worker n'a pas répondu dans les 4 secondes.");
+                console.error(`[IA TIMEOUT] Le Worker n'a pas répondu dans les ${timeoutMs / 1000}s.`);
                 if (backgroundWorker) {
                     backgroundWorker.terminate();
                     backgroundWorker = null;
                 }
-                done({ steps: [], status: 'error', message: 'timeout 4s' });
-            }, 4000);
+                done({ steps: [], status: 'error', message: `timeout ${timeoutMs / 1000}s` });
+            }, timeoutMs);
             worker.postMessage({ id, action: 'solve', hand, board, isOpened, options });
         });
     }
@@ -4569,20 +5044,28 @@
         }
     }
 
-    function remapNewRowIds(steps) {
+    function remapNewRowIds(steps, board = boardRows) {
         if (!steps || steps.length === 0) return steps;
+        syncMeldIdCounter(board);
+        const existingBoardIds = new Set((board || []).map(r => r.id));
         const idMap = new Map();
+        const getFreshId = () => {
+            let id;
+            do { id = nextMeldId(); } while (existingBoardIds.has(id));
+            existingBoardIds.add(id);
+            return id;
+        };
         return steps.map(step => {
             let s = { ...step };
             if (typeof s.toLineId === 'string' && s.toLineId.startsWith('new-')) {
                 if (!idMap.has(s.toLineId)) {
-                    idMap.set(s.toLineId, nextMeldId());
+                    idMap.set(s.toLineId, getFreshId());
                 }
                 s.toLineId = idMap.get(s.toLineId);
             }
             if (typeof s.fromLineId === 'string' && s.fromLineId.startsWith('new-')) {
                 if (!idMap.has(s.fromLineId)) {
-                    idMap.set(s.fromLineId, nextMeldId());
+                    idMap.set(s.fromLineId, getFreshId());
                 }
                 s.fromLineId = idMap.get(s.fromLineId);
             }
@@ -6716,9 +7199,9 @@
         const proposals = [];
 
         // 1) Proposition principale : « Maximum de tuiles » (profil normal)
-        const resNormal = await requestWorkerSolve(hand, board, isOpened, { budgetMs: 400, profile: 'normal', forcePlay: true });
+        const resNormal = await requestWorkerSolve(hand, board, isOpened, { budgetMs: 1500, profile: 'normal', forcePlay: true, poolCount: pool.length });
         if (resNormal && resNormal.steps && resNormal.steps.length > 0 && resNormal.status === 'ok') {
-            const remappedNormal = remapNewRowIds(resNormal.steps);
+            const remappedNormal = remapNewRowIds(resNormal.steps, board);
             const sorted = sortStepsLogically(remappedNormal, hand);
             const placedCount = sorted.filter(s => s.action === 'place_from_hand').length;
             if (placedCount > 0) {
@@ -6763,9 +7246,9 @@
         const hasJoker = hand.some(t => t.isJoker);
         if (hasJoker) {
             const handWithoutJokers = hand.filter(t => !t.isJoker);
-            const resNoJoker = await requestWorkerSolve(handWithoutJokers, board, isOpened, { budgetMs: 400, profile: 'normal', forcePlay: true });
+            const resNoJoker = await requestWorkerSolve(handWithoutJokers, board, isOpened, { budgetMs: 1500, profile: 'normal', forcePlay: true, poolCount: pool.length });
             if (resNoJoker && resNoJoker.steps && resNoJoker.steps.length > 0 && resNoJoker.status === 'ok') {
-                const remappedNoJoker = remapNewRowIds(resNoJoker.steps);
+                const remappedNoJoker = remapNewRowIds(resNoJoker.steps, board);
                 const sortedNoJoker = sortStepsLogically(remappedNoJoker, handWithoutJokers);
                 const placedCount = sortedNoJoker.filter(s => s.action === 'place_from_hand').length;
                 const maxProp = proposals.find(p => p.id === 'max');
@@ -8048,11 +8531,13 @@
         const thinkStartTime = Date.now();
 
         // Exécution de l'IA dans le Worker
+        const tableTileCount = boardRows.reduce((s, r) => s + r.tiles.length, 0);
         const solveRes = await requestWorkerSolve(aiHand, boardRows, aiOpened, {
             profile: aiCfg.profile,
             aiStyle: aiCfg.aiStyle,
-            budgetMs: aiCfg.budgetMs,
+            budgetMs: getAiBudget(aiProfile, tableTileCount, playerHand.length),
             opponentHandCount: playerHand.length,
+            poolCount: pool.length,
             holdBackCount: aiConsecutiveHoldCount,
             consecutiveMissCount: aiConsecutiveMissCount,
             randomMiss: aiCfg.profile === 'facile' ? Math.random() : undefined
@@ -8079,7 +8564,10 @@
         let backupBoard = cloneRows(boardRows);
 
         if (solveRes && solveRes.steps && solveRes.steps.length > 0) {
-            const rawSteps = remapNewRowIds(solveRes.steps);
+            const rawSteps = remapNewRowIds(solveRes.steps, boardRows);
+            if (typeof window !== 'undefined' && window.location.search.includes('debug=ai')) {
+                console.log("[DEBUG AI] Coup IA :", { source: solveRes.source, phase: solveRes.phase, placed: solveRes.steps.filter(s => s.action === 'place_from_hand').length });
+            }
             const aiSteps = sortStepsLogically(rawSteps, aiHand, { boardRows });
             aiLastTurnReplay = {
                 boardRowsBefore: cloneRows(backupBoard),
@@ -8172,6 +8660,8 @@
                     if (diag && diag.steps && diag.steps.length > 0 && diag.status === 'ok') {
                         console.warn("[DEBUG AI] L'IA a pioché alors qu'un coup légal existait !", {
                             originalStatus: solveRes ? solveRes.status : null,
+                            source: solveRes ? solveRes.source : null,
+                            phase: solveRes ? solveRes.phase : null,
                             reason: solveRes ? solveRes.reason : null,
                             timedOut: solveRes ? solveRes.timedOut : null,
                             candidatesEvaluated: solveRes ? solveRes.candidatesEvaluated : null,
@@ -11141,7 +11631,7 @@
                 const solveRes = await requestWorkerSolve(activeHand, simBoard, activeOpened, { profile: 'facile', budgetMs: 15, forcePlay: true });
 
                 if (solveRes && solveRes.steps && solveRes.steps.length > 0) {
-                    const steps = remapNewRowIds(solveRes.steps);
+                    const steps = remapNewRowIds(solveRes.steps, simBoard);
                     const applied = applySteps({ playerHand: activeHand, boardRows: simBoard }, steps);
                     if (currentTurnP1) { p1Hand = applied.playerHand; p1Opened = true; }
                     else { p2Hand = applied.playerHand; p2Opened = true; }
@@ -11407,7 +11897,7 @@
             const res = await requestWorkerSolve(scen.hand, scen.board, true, { profile: 'facile', budgetMs: 15, forcePlay: true });
             assert(res.status !== 'error', `Crash Worker : ${res.message || ''}`);
             if (res.steps && res.steps.length > 0) {
-                const steps = remapNewRowIds(res.steps);
+                const steps = remapNewRowIds(res.steps, scen.board);
                 const after = applySteps({ playerHand: scen.hand, boardRows: scen.board }, steps);
                 const check = validateTurn(scen.board, after.boardRows, scen.hand, after.playerHand, true);
                 assert(check.valid, `Coup invalide R11 : ${check.errors[0]?.message}`);
@@ -11517,7 +12007,7 @@
                         const res = await requestWorkerSolve(scen.hand, scen.board, op, { profile: prof, budgetMs: 15, forcePlay: true });
                         assert(res.status !== 'error', `Crash Worker au cas seed=${5000+i}, profile=${prof}, opened=${op}: ${res.message || ''}`);
                         if (res.steps && res.steps.length > 0) {
-                            const steps = remapNewRowIds(res.steps);
+                            const steps = remapNewRowIds(res.steps, scen.board);
                             const after = applySteps({ playerHand: scen.hand, boardRows: scen.board }, steps);
                             const check = validateTurn(scen.board, after.boardRows, scen.hand, after.playerHand, op);
                             assert(check.valid, `Coup invalide au cas seed=${5000+i}, profile=${prof}, opened=${op}: ${check.errors[0]?.message}`);
@@ -11726,7 +12216,7 @@
             ];
             const res = await requestWorkerSolve(aiHandOpening, table, false, { profile: 'expert', budgetMs: 500, forcePlay: true });
             assert(res && res.steps && res.steps.length > 0, "L'IA doit trouver son ouverture");
-            const remappedSteps = remapNewRowIds(res.steps);
+            const remappedSteps = remapNewRowIds(res.steps, table);
             const applied = applySteps({ playerHand: aiHandOpening, boardRows: table }, remappedSteps);
 
             const row1001 = applied.boardRows.find(r => r.id === 1001);
@@ -11755,7 +12245,7 @@
                 const res = await requestWorkerSolve(activeHand, simBoard, activeOpened, { profile: 'normal', budgetMs: 20, forcePlay: true });
 
                 if (res && res.steps && res.steps.length > 0) {
-                    const steps = remapNewRowIds(res.steps);
+                    const steps = remapNewRowIds(res.steps, simBoard);
                     const applied = applySteps({ playerHand: activeHand, boardRows: simBoard }, steps);
                     if (turnP1) { p1Hand = applied.playerHand; p1Opened = true; }
                     else { p2Hand = applied.playerHand; p2Opened = true; }
@@ -15868,18 +16358,318 @@
             return "window.getStepDescription est bien undefined";
         });
 
-        await runTestCase("Garde-fou : aucune fenêtre plein écran laissée ouverte par les tests", () => {
-            const goOverlay = document.getElementById('game-over-overlay');
-            const starterOverlay = document.getElementById('starter-draw-overlay');
-            const settingsOverlay = document.getElementById('welcome-settings-overlay');
-            assert(goOverlay !== null, "#game-over-overlay doit exister");
-            assert(starterOverlay !== null, "#starter-draw-overlay doit exister");
-            assert(settingsOverlay !== null, "#welcome-settings-overlay doit exister");
+        await runTestCase("Worker : démarre et répond", async () => {
+            const t0 = performance.now();
+            const res = await requestWorkerSolve([], [], true, { profile: 'normal', budgetMs: 50 });
+            const dur = performance.now() - t0;
+            assert(dur < 2000, `Temps de réponse trop long : ${dur} ms`);
+            assert(res.status !== 'error', `Status 'error' non attendu : ${res.message || ''}`);
+            return `Worker a répondu en ${Math.round(dur)} ms avec status '${res.status}'`;
+        });
 
-            assert(window.getComputedStyle(goOverlay).display === 'none', "#game-over-overlay doit avoir display 'none'");
-            assert(window.getComputedStyle(starterOverlay).display === 'none', "#starter-draw-overlay doit avoir display 'none'");
-            assert(window.getComputedStyle(settingsOverlay).display === 'none', "#welcome-settings-overlay doit avoir display 'none'");
-            return "Toutes les fenêtres plein écran sont bien fermées";
+        await runTestCase("IA tactique : insertion du 5 dans 3-4-5-6-7 rouge", async () => {
+            const board = [{ id: 95001, type: 'run', tiles: [3, 4, 5, 6, 7].map((v, i) => ({ id: 95100 + i, value: v, color: 'red', isJoker: false })) }];
+            const hand = [{ id: 95110, value: 5, color: 'red', isJoker: false }];
+            const res = await requestWorkerSolve(hand, board, true, { tacticalOnly: true });
+            assert(res.status === 'ok', `Status attendu 'ok', obtenu '${res.status}'`);
+            assert((res.steps || []).filter(s => s.action === 'place_from_hand').length === 1, "1 tuile posée attendue");
+            const after = applySteps({ playerHand: hand, boardRows: board }, remapNewRowIds(res.steps, board));
+            assert(validateTurn(board, after.boardRows, hand, after.playerHand, true).valid, "Coup invalide");
+            const rowStrings = after.boardRows.map(r => r.tiles.map(t => t.value).sort((a, b) => a - b).join('-')).sort();
+            assert(rowStrings.includes('3-4-5') && rowStrings.includes('5-6-7'), "Suites 3-4-5 et 5-6-7 attendues");
+            return "1 tuile posée, suites 3-4-5 et 5-6-7 créées et coup valide";
+        });
+
+        await runTestCase("IA tactique : bout de suite 4-5-6-7 bleu + 7 rouge + 7 jaune", async () => {
+            const board = [{ id: 95002, type: 'run', tiles: [4, 5, 6, 7].map((v, i) => ({ id: 95200 + i, value: v, color: 'blue', isJoker: false })) }];
+            const hand = [{ id: 95210, value: 7, color: 'red', isJoker: false }, { id: 95211, value: 7, color: 'yellow', isJoker: false }];
+            const res = await requestWorkerSolve(hand, board, true, { tacticalOnly: true });
+            assert(res.status === 'ok', `Status attendu 'ok', obtenu '${res.status}'`);
+            assert((res.steps || []).filter(s => s.action === 'place_from_hand').length === 2, "2 tuiles posées attendues");
+            const after = applySteps({ playerHand: hand, boardRows: board }, remapNewRowIds(res.steps, board));
+            assert(validateTurn(board, after.boardRows, hand, after.playerHand, true).valid, "Coup invalide");
+            return "2 tuiles posées, 7 bleu extrait et groupe de 7s formé validé";
+        });
+
+        await runTestCase("IA tactique : milieu de 1..7 noir + 4 rouge + 4 jaune", async () => {
+            const board = [{ id: 95003, type: 'run', tiles: [1, 2, 3, 4, 5, 6, 7].map((v, i) => ({ id: 95300 + i, value: v, color: 'black', isJoker: false })) }];
+            const hand = [{ id: 95310, value: 4, color: 'red', isJoker: false }, { id: 95311, value: 4, color: 'yellow', isJoker: false }];
+            const res = await requestWorkerSolve(hand, board, true, { tacticalOnly: true });
+            assert(res.status === 'ok', `Status attendu 'ok', obtenu '${res.status}'`);
+            assert((res.steps || []).filter(s => s.action === 'place_from_hand').length === 2, "2 tuiles posées attendues");
+            const after = applySteps({ playerHand: hand, boardRows: board }, remapNewRowIds(res.steps, board));
+            assert(validateTurn(board, after.boardRows, hand, after.playerHand, true).valid, "Coup invalide");
+            const rowStrings = after.boardRows.map(r => r.tiles.map(t => t.value).sort((a, b) => a - b).join('-')).sort();
+            assert(rowStrings.includes('1-2-3') && rowStrings.includes('5-6-7') && rowStrings.includes('4-4-4'), "Rangées 1-2-3, 5-6-7 et 4-4-4 attendues");
+            return "2 tuiles posées, 4 noir extrait, suites 1-2-3 et 5-6-7 et série de 4 créées";
+        });
+
+        await runTestCase("IA tactique : 4e tuile de la série 8 + 9 noir + 10 noir", async () => {
+            const board = [{ id: 95004, type: 'group', tiles: [
+                { id: 95401, value: 8, color: 'red', isJoker: false },
+                { id: 95402, value: 8, color: 'blue', isJoker: false },
+                { id: 95403, value: 8, color: 'yellow', isJoker: false },
+                { id: 95404, value: 8, color: 'black', isJoker: false }
+            ]}];
+            const hand = [{ id: 95410, value: 9, color: 'black', isJoker: false }, { id: 95411, value: 10, color: 'black', isJoker: false }];
+            const res = await requestWorkerSolve(hand, board, true, { tacticalOnly: true });
+            assert(res.status === 'ok', `Status attendu 'ok', obtenu '${res.status}'`);
+            assert((res.steps || []).filter(s => s.action === 'place_from_hand').length === 2, "2 tuiles posées attendues");
+            const after = applySteps({ playerHand: hand, boardRows: board }, remapNewRowIds(res.steps, board));
+            assert(validateTurn(board, after.boardRows, hand, after.playerHand, true).valid, "Coup invalide");
+            return "2 tuiles posées, 8 noir extrait et suite 8-9-10 noir validée";
+        });
+
+        await runTestCase("IA tactique : récupération du joker 4-J-6 rouge avec 5 rouge, 9 bleu, 9 jaune", async () => {
+            const board = [{ id: 95005, type: 'run', tiles: [{ id: 95501, value: 4, color: 'red', isJoker: false }, { id: 95502, value: 0, color: 'black', isJoker: true }, { id: 95503, value: 6, color: 'red', isJoker: false }] }];
+            const hand = [{ id: 95510, value: 5, color: 'red', isJoker: false }, { id: 95511, value: 9, color: 'blue', isJoker: false }, { id: 95512, value: 9, color: 'yellow', isJoker: false }];
+            const res = await requestWorkerSolve(hand, board, true, { tacticalOnly: true });
+            assert(res.status === 'ok', `Status attendu 'ok', obtenu '${res.status}'`);
+            assert((res.steps || []).filter(s => s.action === 'place_from_hand').length === 3, "3 tuiles posées attendues");
+            const after = applySteps({ playerHand: hand, boardRows: board }, remapNewRowIds(res.steps, board));
+            assert(validateTurn(board, after.boardRows, hand, after.playerHand, true).valid, "Coup invalide");
+            return "3 tuiles posées, joker libéré et rejoué avec 9 bleu et 9 jaune validé";
+        });
+
+        await runTestCase("IA tactique : joker de la série 10 rouge/bleu/J avec 10 jaune, 2 noir, 3 noir", async () => {
+            const board = [{ id: 95006, type: 'group', tiles: [{ id: 95601, value: 10, color: 'red', isJoker: false }, { id: 95602, value: 10, color: 'blue', isJoker: false }, { id: 95603, value: 0, color: 'black', isJoker: true }] }];
+            const hand = [{ id: 95610, value: 10, color: 'yellow', isJoker: false }, { id: 95611, value: 2, color: 'black', isJoker: false }, { id: 95612, value: 3, color: 'black', isJoker: false }];
+            const res = await requestWorkerSolve(hand, board, true, { tacticalOnly: true });
+            assert(res.status === 'ok', `Status attendu 'ok', obtenu '${res.status}'`);
+            assert((res.steps || []).filter(s => s.action === 'place_from_hand').length === 3, "3 tuiles posées attendues");
+            const after = applySteps({ playerHand: hand, boardRows: board }, remapNewRowIds(res.steps, board));
+            assert(validateTurn(board, after.boardRows, hand, after.playerHand, true).valid, "Coup invalide");
+            return "3 tuiles posées, joker de série libéré et rejoué avec 2 et 3 noir validé";
+        });
+
+        await runTestCase("IA intégrée : insertion trouvée sur une grande table", async () => {
+            const scen = generateDeterministicScenario(60, 14, 7001);
+            const filteredBoard = scen.board.filter(r => !r.tiles.some(t => t.color === 'red' && t.value >= 3 && t.value <= 7));
+            const redRun = {
+                id: 95007,
+                type: 'run',
+                tiles: [3, 4, 5, 6, 7].map((v, i) => ({ id: 95700 + i, value: v, color: 'red', isJoker: false }))
+            };
+            const board = [...filteredBoard, redRun];
+            const hand = [
+                { id: 95710, value: 5, color: 'red', isJoker: false },
+                { id: 95711, value: 13, color: 'black', isJoker: false }
+            ];
+            for (const profile of ['normal', 'expert']) {
+                const t0 = performance.now();
+                const res = await requestWorkerSolve(hand, board, true, { profile, aiStyle: 'play_now', budgetMs: 1000 });
+                const dur = performance.now() - t0;
+                assert(dur < 1600, `Temps de réponse trop long pour ${profile} : ${dur} ms`);
+                assert(res.status === 'ok', `Status attendu 'ok' pour ${profile}, obtenu '${res.status}'`);
+                assert((res.steps || []).filter(s => s.action === 'place_from_hand').length >= 1, `Au moins 1 tuile posée attendue pour ${profile}`);
+                const after = applySteps({ playerHand: hand, boardRows: board }, remapNewRowIds(res.steps, board));
+                assert(validateTurn(board, after.boardRows, hand, after.playerHand, true).valid, `Coup invalide pour ${profile}`);
+            }
+            return "Insertion trouvée et validée en < 1600 ms pour normal et expert";
+        });
+
+        await runTestCase("IA repli : bnb à court de temps", async () => {
+            const scen = generateDeterministicScenario(60, 14, 7001);
+            const filteredBoard = scen.board.filter(r => !r.tiles.some(t => t.color === 'red' && t.value >= 3 && t.value <= 7));
+            const redRun = {
+                id: 95008,
+                type: 'run',
+                tiles: [3, 4, 5, 6, 7].map((v, i) => ({ id: 95800 + i, value: v, color: 'red', isJoker: false }))
+            };
+            const board = [...filteredBoard, redRun];
+            const hand = [
+                { id: 95810, value: 5, color: 'red', isJoker: false },
+                { id: 95811, value: 13, color: 'black', isJoker: false }
+            ];
+            const res = await requestWorkerSolve(hand, board, true, { profile: 'expert', aiStyle: 'play_now', skipBnb: true });
+            assert(res.status === 'ok', `Status attendu 'ok', obtenu '${res.status}'`);
+            assert(res.source === 'tactical', `Source attendue 'tactical', obtenue '${res.source}'`);
+            const after = applySteps({ playerHand: hand, boardRows: board }, remapNewRowIds(res.steps, board));
+            assert(validateTurn(board, after.boardRows, hand, after.playerHand, true).valid, "Coup invalide");
+            return `Coup valide trouvé avec repli (source: ${res.source})`;
+        });
+
+        await runTestCase("IA : bnb rapide sur la même position", async () => {
+            const scen = generateDeterministicScenario(60, 14, 7001);
+            const filteredBoard = scen.board.filter(r => !r.tiles.some(t => t.color === 'red' && t.value >= 3 && t.value <= 7));
+            const redRun = {
+                id: 95008,
+                type: 'run',
+                tiles: [3, 4, 5, 6, 7].map((v, i) => ({ id: 95800 + i, value: v, color: 'red', isJoker: false }))
+            };
+            const board = [...filteredBoard, redRun];
+            const hand = [
+                { id: 95810, value: 5, color: 'red', isJoker: false },
+                { id: 95811, value: 13, color: 'black', isJoker: false }
+            ];
+            const res = await requestWorkerSolve(hand, board, true, { profile: 'expert', aiStyle: 'play_now', budgetMs: 1 });
+            assert(res.status === 'ok', `Status attendu 'ok', obtenu '${res.status}'`);
+            assert(['bnb', 'tactical', 'fallback'].includes(res.source), `Source attendue in ['bnb', 'tactical', 'fallback'], obtenue '${res.source}'`);
+            const after = applySteps({ playerHand: hand, boardRows: board }, remapNewRowIds(res.steps, board));
+            assert(validateTurn(board, after.boardRows, hand, after.playerHand, true).valid, "Coup invalide");
+            return `Coup valide trouvé (source: ${res.source})`;
+        });
+
+        await runTestCase("IA moteur : arrêt anticipé", async () => {
+            const board = [{ id: 96001, type: 'run', tiles: [4, 5, 6].map((v, i) => ({ id: 96100 + i, value: v, color: 'red', isJoker: false })) }];
+            const hand = [{ id: 96110, value: 7, color: 'red', isJoker: false }, { id: 96111, value: 8, color: 'red', isJoker: false }];
+            const t0 = performance.now();
+            const res = await requestWorkerSolve(hand, board, true, { profile: 'normal', budgetMs: 1000 });
+            const dur = performance.now() - t0;
+            assert(res.status === 'ok', `Status attendu 'ok', obtenu '${res.status}'`);
+            assert(res.optimal === true, `Attendu optimal === true, obtenu ${res.optimal}`);
+            assert(dur < 100, `Temps de réponse trop long : ${Math.round(dur)} ms >= 100 ms`);
+            return `Arrêt anticipé validé en ${Math.round(dur)} ms avec optimal: true`;
+        });
+
+        await runTestCase("IA moteur : tuiles mortes", async () => {
+            const hand = [
+                { id: 96201, value: 1, color: 'red', isJoker: false },
+                { id: 96202, value: 13, color: 'blue', isJoker: false },
+                { id: 96203, value: 7, color: 'yellow', isJoker: false },
+                { id: 96204, value: 9, color: 'black', isJoker: false },
+                { id: 96205, value: 10, color: 'black', isJoker: false },
+                { id: 96206, value: 11, color: 'black', isJoker: false }
+            ];
+            const res = await requestWorkerSolve(hand, [], true, { profile: 'normal', budgetMs: 1000 });
+            assert(res.status === 'ok', `Status attendu 'ok', obtenu '${res.status}'`);
+            assert(res.liveHandTotal === 3, `liveHandTotal attendu 3, obtenu ${res.liveHandTotal}`);
+            const placed = (res.steps || []).filter(s => s.action === 'place_from_hand').length;
+            assert(placed === 3, `3 tuiles posées attendues, obtenu ${placed}`);
+            const after = applySteps({ playerHand: hand, boardRows: [] }, remapNewRowIds(res.steps, []));
+            assert(validateTurn([], after.boardRows, hand, after.playerHand, true).valid, "Coup invalide");
+            return "liveHandTotal = 3 (tuiles mortes exclues) et meld 9-10-11 noir trouvé et validé";
+        });
+
+        await runTestCase("IA moteur : mêmes résultats qu'avant", async () => {
+            for (let i = 0; i < 50; i++) {
+                const scen = generateDeterministicScenario(24 + (i % 3) * 12, 14, 7400 + i);
+                const tac = await requestWorkerSolve(scen.hand, scen.board, true, { tacticalOnly: true });
+                const tacPlaced = (tac.steps || []).filter(s => s.action === 'place_from_hand').length;
+                const res = await requestWorkerSolve(scen.hand, scen.board, true, { profile: 'normal', budgetMs: 1500 });
+                const resPlaced = (res.steps || []).filter(s => s.action === 'place_from_hand').length;
+                assert(resPlaced >= tacPlaced, `Position seed ${7400 + i}: attendu >= ${tacPlaced}, obtenu ${resPlaced}`);
+                if (res.steps && res.steps.length > 0) {
+                    const after = applySteps({ playerHand: scen.hand, boardRows: scen.board }, remapNewRowIds(res.steps, scen.board));
+                    assert(validateTurn(scen.board, after.boardRows, scen.hand, after.playerHand, true).valid, `Coup invalide seed ${7400 + i}`);
+                }
+            }
+            return "50 positions testées : tuiles posées >= tactique et tous les coups générés sont valides";
+        });
+
+        await runTestCase("remapNewRowIds : jamais un identifiant déjà présent sur la table", () => {
+            const savedCounter = meldIdCounter;
+            try {
+                meldIdCounter = 95001;
+                const board = [{ id: 95002, type: 'run', tiles: [] }];
+                const steps = [{ action: 'place_from_hand', tileId: 1, toLineId: 'new-1', type: 'run' }];
+                const mapped = remapNewRowIds(steps, board);
+                assert(mapped[0].toLineId !== 95002, `toLineId ne doit pas être 95002, obtenu ${mapped[0].toLineId}`);
+                return `Identifiant réassigné : ${mapped[0].toLineId} (différent de 95002)`;
+            } finally {
+                meldIdCounter = savedCounter;
+            }
+        });
+
+        await runTestCase("IA-4a : refactor sans changement", async () => {
+            for (let i = 0; i < 20; i++) {
+                const scen = generateDeterministicScenario(24 + (i % 3) * 12, 14, 7600 + i);
+                const tac = await requestWorkerSolve(scen.hand, scen.board, true, { tacticalOnly: true });
+                const tacPlaced = (tac.steps || []).filter(s => s.action === 'place_from_hand').length;
+                const res = await requestWorkerSolve(scen.hand, scen.board, true, { profile: 'normal', budgetMs: 800 });
+                const resPlaced = (res.steps || []).filter(s => s.action === 'place_from_hand').length;
+                assert(resPlaced >= tacPlaced, `Position seed ${7600 + i}: attendu >= ${tacPlaced}, obtenu ${resPlaced}`);
+                if (res.steps && res.steps.length > 0) {
+                    const after = applySteps({ playerHand: scen.hand, boardRows: scen.board }, remapNewRowIds(res.steps, scen.board));
+                    assert(validateTurn(scen.board, after.boardRows, scen.hand, after.playerHand, true).valid, `Coup invalide seed ${7600 + i}`);
+                }
+            }
+            return "20 positions testées : tuiles posées >= tactique et tous les coups générés sont valides";
+        });
+
+        await runTestCase("IA paliers : grande table, coup trouvé en phase 1", async () => {
+            const scen = generateDeterministicScenario(60, 14, 7002);
+            const filteredBoard = scen.board.filter(r => !r.tiles.some(t => t.color === 'red' && t.value >= 3 && t.value <= 7));
+            const redRun = { id: 95009, type: 'run', tiles: [3, 4, 5, 6, 7].map((v, i) => ({ id: 95900 + i, value: v, color: 'red', isJoker: false })) };
+            const board = [...filteredBoard, redRun];
+            const extraTiles = [], testHand = [{ id: 95910, value: 5, color: 'red', isJoker: false }];
+            let candId = 95911;
+            for (const color of ['black', 'yellow', 'blue']) {
+                for (let val = 1; val <= 13; val++) {
+                    if (extraTiles.length >= 6) break;
+                    const cand = { id: candId++, value: val, color, isJoker: false };
+                    const resLive = await requestWorkerSolve([testHand[0], ...extraTiles, cand], board, true, { profile: 'normal', liveOnly: true });
+                    const cType = tileToType(cand);
+                    if (!resLive.liveTypes.includes(cType)) extraTiles.push(cand);
+                }
+                if (extraTiles.length >= 6) break;
+            }
+            const hand = [...testHand, ...extraTiles], t0 = performance.now();
+            const res = await requestWorkerSolve(hand, board, true, { profile: 'normal', budgetMs: 3000 });
+            const dur = performance.now() - t0;
+            assert(res.status === 'ok', `Status attendu 'ok', obtenu '${res.status}'`);
+            assert(res.phase !== undefined && res.phase !== null && res.phase <= 1, `Phase attendue <= 1, obtenue ${res.phase}`);
+            assert(res.liveHandTotal === 1, `liveHandTotal attendu 1 (seul le 5 rouge est vivant), obtenu ${res.liveHandTotal}`);
+            assert(dur < 1000, `Temps de réponse trop long : ${Math.round(dur)} ms >= 1000 ms`);
+            const after = applySteps({ playerHand: hand, boardRows: board }, remapNewRowIds(res.steps, board));
+            assert(validateTurn(board, after.boardRows, hand, after.playerHand, true).valid, "Coup invalide");
+            return `Coup valide trouvé en phase ${res.phase} en ${Math.round(dur)} ms (< 1000 ms, ${extraTiles.length} tuiles mortes ajoutées)`;
+        });
+
+        await runTestCase("IA paliers : jamais moins bon que la couche tactique", async () => {
+            for (let i = 0; i < 30; i++) {
+                const scen = generateDeterministicScenario(45 + (i % 3) * 10, 14, 7100 + i);
+                const tac = await requestWorkerSolve(scen.hand, scen.board, true, { tacticalOnly: true });
+                const tacPlaced = (tac.steps || []).filter(s => s.action === 'place_from_hand').length;
+                const t0 = performance.now();
+                const res = await requestWorkerSolve(scen.hand, scen.board, true, { profile: 'normal', budgetMs: 600 });
+                const dur = performance.now() - t0;
+                assert(dur < 600 + 400, `Position ${i} : temps dépassé (${Math.round(dur)} ms >= 1000 ms)`);
+                const resPlaced = (res.steps || []).filter(s => s.action === 'place_from_hand').length;
+                assert(resPlaced >= tacPlaced, `Position seed ${7100 + i}: attendu >= ${tacPlaced}, obtenu ${resPlaced}`);
+                if (res.steps && res.steps.length > 0) {
+                    const after = applySteps({ playerHand: scen.hand, boardRows: scen.board }, remapNewRowIds(res.steps, scen.board));
+                    assert(validateTurn(scen.board, after.boardRows, scen.hand, after.playerHand, true).valid, `Coup invalide seed ${7100 + i}`);
+                }
+            }
+            return "30 positions testées : tuiles posées >= tactique, toutes valides, temps < 1000 ms";
+        });
+
+        await runTestCase("IA paliers : lignes gelées intactes", async () => {
+            let testedCount = 0;
+            for (let i = 0; i < 20; i++) {
+                const scen = generateDeterministicScenario(45 + (i % 3) * 10, 14, 7500 + i);
+                const res = await requestWorkerSolve(scen.hand, scen.board, true, { profile: 'normal', budgetMs: 600, debugInfo: true });
+                if (res.status === 'ok' && res.steps && res.steps.length > 0 && res.phase !== null && res.phase <= 2) {
+                    const ring2Ids = new Set(res.ring2Ids || []);
+                    const after = applySteps({ playerHand: scen.hand, boardRows: scen.board }, remapNewRowIds(res.steps, scen.board));
+                    for (const r of scen.board) if (!ring2Ids.has(r.id)) {
+                        const ar = after.boardRows.find(row => row.id === r.id);
+                        assert(ar && JSON.stringify(ar.tiles.map(t => t.id)) === JSON.stringify(r.tiles.map(t => t.id)), `Ligne gelée ${r.id} altérée`);
+                    }
+                    testedCount++;
+                }
+            }
+            assert(testedCount > 0, "Au moins une position avec phase <= 2 attendue");
+            return `${testedCount} positions testées (phase <= 2) : toutes les lignes hors de ring 2 sont restées intactes`;
+        });
+
+        await runTestCase("IA : test hook liveOnly", async () => {
+            const hand = [
+                { id: 96301, value: 1, color: 'red', isJoker: false },
+                { id: 96302, value: 13, color: 'blue', isJoker: false },
+                { id: 96303, value: 7, color: 'yellow', isJoker: false },
+                { id: 96304, value: 9, color: 'black', isJoker: false },
+                { id: 96305, value: 10, color: 'black', isJoker: false },
+                { id: 96306, value: 11, color: 'black', isJoker: false }
+            ];
+            const res = await requestWorkerSolve(hand, [], true, { profile: 'normal', liveOnly: true });
+            assert(res.status === 'ok', `Status attendu 'ok', obtenu '${res.status}'`);
+            assert(res.liveHandTotal === 3, `liveHandTotal attendu 3, obtenu ${res.liveHandTotal}`);
+            assert(res.liveTypes && res.liveTypes.includes(tileToType(hand[3])), "liveTypes doit contenir 9 noir");
+            assert(res.liveTypes && res.liveTypes.includes(tileToType(hand[4])), "liveTypes doit contenir 10 noir");
+            assert(res.liveTypes && res.liveTypes.includes(tileToType(hand[5])), "liveTypes doit contenir 11 noir");
+            return "liveHandTotal === 3 et les 3 types noirs sont bien présents dans liveTypes";
         });
 
         await runTestCase("8.12 Badge compact sans texte de titre en mode ai-summary", () => {
@@ -16032,6 +16822,288 @@
             }
         });
 
+        await runTestCase("IA budget adaptatif : valeurs", () => {
+            assert(getAiBudget('expert', 50, 10) === 5000, "Expert table >= 40 attendu 5000");
+            assert(getAiBudget('expert', 10, 5) === 5000, "Expert adversaire <= 5 attendu 5000");
+            assert(getAiBudget('normal', 10, 14) === 1000, "Normal début attendu 1000");
+            assert(getAiBudget('normal', 25, 14) === 2000, "Normal milieu attendu 2000");
+            assert(getAiBudget('facile', 60, 2) === 300, "Facile attendu 300");
+            return "Valeurs de budget conformes pour facile (300), normal (1000/2000/3000) et expert (1500/3000/5000)";
+        });
+
+        await runTestCase("IA budget adaptatif : aiTurn transmet le budget", async () => {
+            const savedState = gameState;
+            const savedProfile = aiProfile;
+            const savedOpened = aiOpened;
+            const savedBoard = cloneRows(boardRows);
+            const savedBBoard = cloneRows(backupBoardRows);
+            const savedBHand = backupPlayerHand.map(cloneTile);
+            const savedAiHand = aiHand.map(cloneTile);
+            const savedPlayerHand = playerHand.map(cloneTile);
+            const savedPool = pool.map(cloneTile);
+            const savedGen = gameGeneration;
+            const savedMatchHistory = JSON.parse(JSON.stringify(matchHistory));
+            const savedMatchFinished = matchFinished;
+            const savedCurrentRound = currentRound;
+            const savedConsecutivePassCount = consecutivePassCount;
+            const savedRoundStats = JSON.parse(JSON.stringify(roundStats));
+            const origWorkerSolve = requestWorkerSolve;
+            let capturedOptions = null;
+
+            try {
+                tileAssertSilenced = true;
+                aiProfile = 'expert';
+                aiOpened = true;
+                gameState = 'AI_TURN';
+                const scen = generateDeterministicScenario(50, 14, 7700);
+                boardRows = scen.board;
+                backupBoardRows = cloneRows(boardRows);
+                aiHand = [1, 2, 3, 4, 5].map(v => ({ id: 99600 + v, value: v, color: 'blue', isJoker: false }));
+                backupPlayerHand = [1, 2, 3, 4, 5].map(v => ({ id: 99610 + v, value: v, color: 'red', isJoker: false }));
+                playerHand = backupPlayerHand.map(cloneTile);
+                pool = [1, 2, 3, 4, 5].map(v => ({ id: 99620 + v, value: v, color: 'yellow', isJoker: false }));
+
+                requestWorkerSolve = async (h, b, op, opts) => {
+                    capturedOptions = opts;
+                    return { status: 'no_moves', steps: [] };
+                };
+
+                await aiTurn();
+
+                assert(capturedOptions !== null, "requestWorkerSolve doit avoir été appelé");
+                assert(capturedOptions.budgetMs === 5000, `budgetMs attendu 5000, obtenu ${capturedOptions.budgetMs}`);
+                return `Budget transmis par aiTurn : ${capturedOptions.budgetMs} ms (>= 40 tuiles sur la table)`;
+            } finally {
+                stopTurnTimer();
+                hideContextPanel('test-cleanup');
+                const goOverlay = document.getElementById('game-over-overlay');
+                if (goOverlay) goOverlay.style.display = 'none';
+                requestWorkerSolve = origWorkerSolve;
+                aiProfile = savedProfile;
+                aiOpened = savedOpened;
+                gameState = savedState;
+                boardRows = savedBoard;
+                backupBoardRows = savedBBoard;
+                backupPlayerHand = savedBHand;
+                aiHand = savedAiHand;
+                playerHand = savedPlayerHand;
+                pool = savedPool;
+                gameGeneration = savedGen;
+                matchHistory = savedMatchHistory;
+                matchFinished = savedMatchFinished;
+                currentRound = savedCurrentRound;
+                consecutivePassCount = savedConsecutivePassCount;
+                roundStats = savedRoundStats;
+                tileAssertSilenced = false;
+            }
+        });
+
+        await runTestCase("IA sécurité : pas de timeout prématuré à 5 s", async () => {
+            const scen = generateDeterministicScenario(70, 14, 7701);
+            const res = await requestWorkerSolve(scen.hand, scen.board, true, { profile: 'expert', aiStyle: 'play_now', budgetMs: 5000 });
+            assert(res.status !== 'error', `Erreur inattendue : ${res.message || ''}`);
+            return `Worker a répondu avec status '${res.status}' sans timeout prématuré`;
+        });
+
+        await runTestCase("Indices : budget de 1500 ms", async () => {
+            const origWorkerSolve = requestWorkerSolve;
+            const recordedBudgets = [];
+            try {
+                requestWorkerSolve = async (h, b, op, opts) => {
+                    if (opts && typeof opts.budgetMs === 'number') {
+                        recordedBudgets.push(opts.budgetMs);
+                    }
+                    return origWorkerSolve(h, b, op, opts);
+                };
+                const smallBoard = [{
+                    id: 99701,
+                    type: 'run',
+                    tiles: [
+                        { id: 99711, value: 4, color: 'red', isJoker: false },
+                        { id: 99712, value: 5, color: 'red', isJoker: false },
+                        { id: 99713, value: 6, color: 'red', isJoker: false }
+                    ]
+                }];
+                const smallHand = [{ id: 99714, value: 7, color: 'red', isJoker: false }];
+                await computeCandidateProposals(smallHand, smallBoard, true);
+
+                assert(recordedBudgets.length > 0, "requestWorkerSolve doit avoir été appelé");
+                assert(recordedBudgets[0] === 1500, `Premier budgetMs attendu 1500, obtenu ${recordedBudgets[0]}`);
+                return `Premier budgetMs enregistré : ${recordedBudgets[0]} ms pour computeCandidateProposals`;
+            } finally {
+                requestWorkerSolve = origWorkerSolve;
+            }
+        });
+
+        await runTestCase("IA : un coup avec joker qui pose plus de tuiles est préféré (Normal)", async () => {
+            const board = [{ id: 99701, type: 'run', tiles: [
+                { id: 99702, value: 4, color: 'red', isJoker: false },
+                { id: 99703, value: 5, color: 'red', isJoker: false },
+                { id: 99704, value: 6, color: 'red', isJoker: false }
+            ]}];
+            const hand = [
+                { id: 99705, value: 0, color: 'black', isJoker: true },
+                { id: 99706, value: 7, color: 'red', isJoker: false },
+                { id: 99707, value: 9, color: 'blue', isJoker: false },
+                { id: 99708, value: 9, color: 'yellow', isJoker: false }
+            ];
+            const res = await requestWorkerSolve(hand, board, true, { profile: 'normal', budgetMs: 1000 });
+            assert(res.status === 'ok', `Status attendu 'ok', obtenu '${res.status}'`);
+            const placed = (res.steps || []).filter(s => s.action === 'place_from_hand').length;
+            assert(placed === 4, `4 tuiles posées attendues, obtenu ${placed}`);
+            const after = applySteps({ playerHand: hand, boardRows: board }, remapNewRowIds(res.steps, board));
+            assert(validateTurn(board, after.boardRows, hand, after.playerHand, true).valid, "Coup invalide");
+            return "4 tuiles posées avec le joker et coup validé";
+        });
+
+        await runTestCase("IA Expert : garde son joker en début de partie", async () => {
+            const board = [{ id: 99711, type: 'run', tiles: [
+                { id: 99712, value: 4, color: 'red', isJoker: false },
+                { id: 99713, value: 5, color: 'red', isJoker: false },
+                { id: 99714, value: 6, color: 'red', isJoker: false }
+            ]}];
+            const hand = [
+                { id: 99715, value: 0, color: 'black', isJoker: true },
+                { id: 99716, value: 7, color: 'red', isJoker: false },
+                { id: 99717, value: 12, color: 'black', isJoker: false }
+            ];
+            const res = await requestWorkerSolve(hand, board, true, { profile: 'expert', aiStyle: 'strategic', opponentHandCount: 14, poolCount: 40, budgetMs: 1000 });
+            assert(res.status === 'ok', `Status attendu 'ok', obtenu '${res.status}'`);
+            const placedSteps = (res.steps || []).filter(s => s.action === 'place_from_hand');
+            assert(placedSteps.length === 1, `Exactement 1 tuile posée attendue, obtenu ${placedSteps.length}`);
+            assert(placedSteps[0].tileId === 99716, "La tuile posée doit être le 7 rouge");
+            const placedIds = new Set(placedSteps.map(s => s.tileId));
+            assert(!placedIds.has(99715), "Le joker doit rester en main");
+            return "Exactement 1 tuile posée (7 rouge) et le joker reste en main";
+        });
+
+        await runTestCase("IA Expert : ne garde plus son joker quand l'adversaire a 5 tuiles", async () => {
+            const board = [{ id: 99711, type: 'run', tiles: [
+                { id: 99712, value: 4, color: 'red', isJoker: false },
+                { id: 99713, value: 5, color: 'red', isJoker: false },
+                { id: 99714, value: 6, color: 'red', isJoker: false }
+            ]}];
+            const hand = [
+                { id: 99715, value: 0, color: 'black', isJoker: true },
+                { id: 99716, value: 7, color: 'red', isJoker: false },
+                { id: 99717, value: 12, color: 'black', isJoker: false }
+            ];
+            const res = await requestWorkerSolve(hand, board, true, { profile: 'expert', aiStyle: 'strategic', opponentHandCount: 5, poolCount: 40, budgetMs: 1000 });
+            assert(res.status === 'ok', `Status attendu 'ok', obtenu '${res.status}'`);
+            const placedIds = new Set((res.steps || []).filter(s => s.action === 'place_from_hand').map(s => s.tileId));
+            assert(placedIds.has(99715), "Le joker doit être posé");
+            return "Status 'ok' et le joker est bien posé";
+        });
+
+        await runTestCase("IA fin de partie : préfère se débarrasser des grosses valeurs", async () => {
+            const hand = [
+                { id: 99721, value: 0, color: 'black', isJoker: true },
+                { id: 99722, value: 1, color: 'red', isJoker: false },
+                { id: 99723, value: 2, color: 'red', isJoker: false },
+                { id: 99724, value: 12, color: 'blue', isJoker: false },
+                { id: 99725, value: 13, color: 'blue', isJoker: false }
+            ];
+            const res = await requestWorkerSolve(hand, [], true, { profile: 'normal', opponentHandCount: 2, poolCount: 20, budgetMs: 1000 });
+            assert(res.status === 'ok', `Status attendu 'ok', obtenu '${res.status}'`);
+            const placedIds = new Set((res.steps || []).filter(s => s.action === 'place_from_hand').map(s => s.tileId));
+            assert(placedIds.has(99724) && placedIds.has(99725), "12 bleu et 13 bleu doivent être posés");
+            const remPoints = hand.filter(t => !placedIds.has(t.id)).reduce((sum, t) => sum + (t.isJoker ? 30 : t.value), 0);
+            assert(remPoints === 3, `Points restants attendus 3, obtenu ${remPoints}`);
+            return "12 bleu et 13 bleu posés, points restants = 3 (et non 25)";
+        });
+
+        await runTestCase("IA souplesse : à nombre de tuiles égal, garde la main la plus jouable", async () => {
+            const hand = [
+                { id: 99731, value: 8, color: 'blue', isJoker: false },
+                { id: 99732, value: 5, color: 'yellow', isJoker: false },
+                { id: 99733, value: 6, color: 'blue', isJoker: false },
+                { id: 99734, value: 6, color: 'yellow', isJoker: false },
+                { id: 99735, value: 7, color: 'blue', isJoker: false },
+                { id: 99736, value: 7, color: 'yellow', isJoker: false },
+                { id: 99737, value: 6, color: 'red', isJoker: false },
+                { id: 99738, value: 7, color: 'red', isJoker: false }
+            ];
+            const remA = [{ id: 99737, value: 6, color: 'red', isJoker: false }, { id: 99738, value: 7, color: 'red', isJoker: false }];
+            const remB = [{ id: 99731, value: 8, color: 'blue', isJoker: false }, { id: 99732, value: 5, color: 'yellow', isJoker: false }];
+            assert(calculateHandScore(remA) === calculateHandScore(remB), "Les deux mains restantes doivent avoir le même score");
+            const res = await requestWorkerSolve(hand, [], true, { profile: 'normal', budgetMs: 1500 });
+            assert(res.status === 'ok', `Status attendu 'ok', obtenu '${res.status}'`);
+            const placedIds = new Set((res.steps || []).filter(s => s.action === 'place_from_hand').map(s => s.tileId));
+            assert(placedIds.size === 6, `6 tuiles posées attendues, obtenu ${placedIds.size}`);
+            assert(!placedIds.has(99737) && !placedIds.has(99738), "6 rouge et 7 rouge (paire) doivent être gardés en main");
+            assert(res.flexibility === 2, `Flexibilité attendue 2, obtenue ${res.flexibility}`);
+            assert(res.remainingPoints === 13, `Points restants attendus 13, obtenu ${res.remainingPoints}`);
+            return "La paire 6 rouge / 7 rouge est conservée avec flexibilité 2 (contre 0 pour les isolées)";
+        });
+
+        await runTestCase("IA Expert : ne garde plus son joker quand la pioche est presque vide", async () => {
+            const board = [{ id: 99711, type: 'run', tiles: [
+                { id: 99712, value: 4, color: 'red', isJoker: false },
+                { id: 99713, value: 5, color: 'red', isJoker: false },
+                { id: 99714, value: 6, color: 'red', isJoker: false }
+            ]}];
+            const hand = [
+                { id: 99715, value: 0, color: 'black', isJoker: true },
+                { id: 99716, value: 7, color: 'red', isJoker: false },
+                { id: 99717, value: 12, color: 'black', isJoker: false }
+            ];
+            const res = await requestWorkerSolve(hand, board, true, { profile: 'expert', aiStyle: 'strategic', opponentHandCount: 14, poolCount: 6, budgetMs: 1000 });
+            assert(res.status === 'ok', `Status attendu 'ok', obtenu '${res.status}'`);
+            const placedIds = new Set((res.steps || []).filter(s => s.action === 'place_from_hand').map(s => s.tileId));
+            assert(placedIds.has(99715), "Le joker doit être posé");
+            return "Le joker est bien posé lorsque la pioche est presque vide (poolCount: 6)";
+        });
+
+        await runTestCase("IA tactique : n'utilise pas le joker pour un ajout simple si une vraie tuile suffit", async () => {
+            const board = [{ id: 99781, type: 'run', tiles: [
+                { id: 99782, value: 4, color: 'red', isJoker: false },
+                { id: 99783, value: 5, color: 'red', isJoker: false },
+                { id: 99784, value: 6, color: 'red', isJoker: false }
+            ]}];
+            const hand = [
+                { id: 99785, value: 0, color: 'black', isJoker: true },
+                { id: 99786, value: 7, color: 'red', isJoker: false }
+            ];
+            const res = await requestWorkerSolve(hand, board, true, { tacticalOnly: true });
+            assert(res.status === 'ok', `Status attendu 'ok', obtenu '${res.status}'`);
+            const handSteps = (res.steps || []).filter(s => s.action === 'place_from_hand');
+            assert(handSteps.length >= 1, "Au moins 1 tuile posée attendue");
+            assert(handSteps[0].tileId === 99786, "La première tuile posée doit être le 7 rouge");
+            if (handSteps.length > 1) {
+                assert(handSteps[1].tileId === 99785, "Le joker ne peut être posé qu'après le 7 rouge");
+            }
+            return "Le 7 rouge est posé en premier, le joker seulement après";
+        });
+
+        await runTestCase("IA fin de partie : arbitrage bnb / tactique sur les points", async () => {
+            const hand = [
+                { id: 99791, value: 0, color: 'black', isJoker: true },
+                { id: 99792, value: 1, color: 'red', isJoker: false },
+                { id: 99793, value: 2, color: 'red', isJoker: false },
+                { id: 99794, value: 12, color: 'blue', isJoker: false },
+                { id: 99795, value: 13, color: 'blue', isJoker: false }
+            ];
+            const res = await requestWorkerSolve(hand, [], true, { profile: 'expert', aiStyle: 'play_now', opponentHandCount: 2, poolCount: 20, budgetMs: 1000 });
+            assert(res.status === 'ok', `Status attendu 'ok', obtenu '${res.status}'`);
+            const placedIds = new Set((res.steps || []).filter(s => s.action === 'place_from_hand').map(s => s.tileId));
+            assert(placedIds.has(99794) && placedIds.has(99795), "12 bleu et 13 bleu doivent être posés");
+            return "12 bleu et 13 bleu posés (arbitrage bnb / tactique sur les points restants)";
+        });
+
+        await runTestCase("Garde-fou : aucune fenêtre plein écran laissée ouverte par les tests", () => {
+            const goOverlay = document.getElementById('game-over-overlay');
+            const starterOverlay = document.getElementById('starter-draw-overlay');
+            const settingsOverlay = document.getElementById('welcome-settings-overlay');
+            assert(goOverlay !== null, "#game-over-overlay doit exister");
+            assert(starterOverlay !== null, "#starter-draw-overlay doit exister");
+            assert(settingsOverlay !== null, "#welcome-settings-overlay doit exister");
+
+            assert(window.getComputedStyle(goOverlay).display === 'none', "#game-over-overlay doit avoir display 'none'");
+            assert(window.getComputedStyle(starterOverlay).display === 'none', "#starter-draw-overlay doit avoir display 'none'");
+            assert(window.getComputedStyle(settingsOverlay).display === 'none', "#welcome-settings-overlay doit avoir display 'none'");
+            return "Toutes les fenêtres plein écran sont bien fermées";
+        });
+
         await runTestCase("Garde-fou : aucun nom de test en double", () => {
             const names = testResults.map(r => r.name);
             const nameSet = new Set(names);
@@ -16143,6 +17215,103 @@
 
         displayTestReport(testResults);
         return testResults;
+    }
+
+    async function runAiBenchmark() {
+        stopTurnTimer();
+        gameState = 'BENCH';
+        const overlay = document.getElementById('test-report-overlay');
+        const container = document.getElementById('test-results-container');
+        if (overlay) {
+            const h2 = overlay.querySelector('h2');
+            if (h2) h2.textContent = "Benchmark IA";
+            overlay.style.display = 'flex';
+        }
+        const prevSummary = (() => {
+            try { return JSON.parse(localStorage.getItem('rummikub_ai_bench_last') || 'null'); } catch (e) { return null; }
+        })();
+
+        const scenarios = [];
+        for (let i = 0; i < 20; i++) {
+            const seed = 7200 + i, bSize = 24 + Math.round(i * 12 / 19);
+            scenarios.push({ type: 'Milieu', seed, bSize, hSize: 14, scen: generateDeterministicScenario(bSize, 14, seed) });
+        }
+        for (let i = 0; i < 40; i++) {
+            const seed = 7300 + i, bSize = 48 + Math.round(i * 22 / 39), hSize = 8 + (i % 7);
+            scenarios.push({ type: 'Fin', seed, bSize, hSize, scen: generateDeterministicScenario(bSize, hSize, seed) });
+        }
+
+        const profiles = ['normal', 'expert'];
+        const results = { normal: [], expert: [], reference: new Map() };
+
+        if (container) container.innerHTML = `<div style="padding:15px; color:var(--accent-gold); font-weight:700;"><i class="fa-solid fa-spinner fa-spin"></i> Benchmark IA : Calcul des 10 références (8 s)...</div>`;
+        for (let i = 20; i < 30; i++) {
+            const s = scenarios[i];
+            const res = await requestWorkerSolve(s.scen.hand, s.scen.board, true, { profile: 'normal', aiStyle: 'play_now', budgetMs: 8000, timeoutMs: 12000 });
+            const placed = (res.steps || []).filter(st => st.action === 'place_from_hand').length;
+            results.reference.set(s.seed, placed);
+        }
+
+        for (const prof of profiles) {
+            const cfg = getAiConfig(prof);
+            for (let idx = 0; idx < scenarios.length; idx++) {
+                const s = scenarios[idx];
+                if (container) container.innerHTML = `<div style="padding:15px; color:var(--accent-gold); font-weight:700;"><i class="fa-solid fa-spinner fa-spin"></i> Benchmark IA : Profil ${prof} (${idx + 1}/60)...</div>`;
+                const t0 = performance.now();
+                const res = await requestWorkerSolve(s.scen.hand, s.scen.board, true, { profile: prof, aiStyle: 'play_now', budgetMs: getAiBudget(prof, s.bSize, 14) });
+                const dur = Math.round(performance.now() - t0);
+                const placedIds = new Set((res.steps || []).filter(st => st.action === 'place_from_hand').map(st => st.tileId));
+                const placed = placedIds.size;
+                const pts = s.scen.hand.filter(t => placedIds.has(t.id)).reduce((sum, t) => sum + (t.isJoker ? 30 : t.value), 0);
+                let valid = true;
+                if (res.steps && res.steps.length > 0) {
+                    const remapped = remapNewRowIds(res.steps, s.scen.board);
+                    const applied = applySteps({ playerHand: s.scen.hand, boardRows: s.scen.board }, remapped);
+                    valid = validateTurn(s.scen.board, applied.boardRows, s.scen.hand, applied.playerHand, true).valid;
+                }
+                const ref = results.reference.get(s.seed);
+                const gap = ref !== undefined ? (ref - placed) : null;
+                results[prof].push({ seed: s.seed, placed, pts, dur, status: res.status || 'ok', source: res.source || res.reason || '-', valid, gap });
+            }
+        }
+
+        const summary = {};
+        for (const prof of profiles) {
+            const list = results[prof];
+            const avgTiles = (list.reduce((sum, r) => sum + r.placed, 0) / list.length).toFixed(2);
+            const avgTime = Math.round(list.reduce((sum, r) => sum + r.dur, 0) / list.length);
+            const maxTime = Math.max(...list.map(r => r.dur));
+            const invalids = list.filter(r => !r.valid).length;
+            const refGap = list.filter(r => r.gap !== null).reduce((sum, r) => sum + r.gap, 0);
+            summary[prof] = { avgTiles, avgTime, maxTime, invalids, refGap };
+        }
+        try { localStorage.setItem('rummikub_ai_bench_last', JSON.stringify(summary)); } catch (e) {}
+
+        const fmtPrev = (prof, key, unit = '') => (prevSummary && prevSummary[prof] && prevSummary[prof][key] !== undefined) ? ` <span style="font-size:0.75rem; color:var(--text-muted);">(préc: ${prevSummary[prof][key]}${unit})</span>` : '';
+        if (container) container.innerHTML = `
+            <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:12px;">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    ${profiles.map(p => `
+                    <div style="background:var(--surface-2); border:1px solid var(--border); border-left:4px solid ${p === 'expert' ? 'var(--accent-gold)' : 'var(--player-color)'}; border-radius:8px; padding:10px; font-size:0.85rem;">
+                        <strong style="color:${p === 'expert' ? 'var(--accent-gold)' : 'var(--player-color)'}; text-transform:uppercase;">Profil ${p}</strong>
+                        <div style="margin-top:4px;">Tuiles posées moy. : <strong>${summary[p].avgTiles}</strong>${fmtPrev(p, 'avgTiles')}</div>
+                        <div>Temps moy. / max : <strong>${summary[p].avgTime} ms</strong>${fmtPrev(p, 'avgTime', 'ms')} / <strong>${summary[p].maxTime} ms</strong>${fmtPrev(p, 'maxTime', 'ms')}</div>
+                        <div>Coups invalides : <strong style="color:${summary[p].invalids ? 'var(--danger-text)' : 'var(--success-text)'};">${summary[p].invalids}</strong>${fmtPrev(p, 'invalids')}</div>
+                        <div>Écart total réf (10 pos) : <strong>${summary[p].refGap}</strong>${fmtPrev(p, 'refGap')}</div>
+                    </div>`).join('')}
+                </div>
+            </div>
+            <table class="test-table" style="font-size:0.78rem;">
+                <thead>
+                    <tr><th># / Type</th><th>Seed</th><th>Table / Main</th><th>Réf (8s)</th><th>Normal (Tuiles / Pts / Temps)</th><th>Expert (Tuiles / Pts / Temps)</th></tr>
+                </thead>
+                <tbody>
+                    ${scenarios.map((sc, i) => {
+                        const n = results.normal[i], e = results.expert[i], ref = results.reference.get(sc.seed);
+                        return `<tr><td>${i + 1}. ${sc.type}</td><td>${sc.seed}</td><td>${sc.bSize} / ${sc.hSize}</td><td>${ref !== undefined ? `<strong>${ref}</strong>` : '—'}</td><td style="color:${n.valid ? 'inherit' : 'var(--danger-text)'};">${n.placed} t. / ${n.pts} pts / ${n.dur}ms ${n.valid ? '✓' : '✖'}</td><td style="color:${e.valid ? 'inherit' : 'var(--danger-text)'};">${e.placed} t. / ${e.pts} pts / ${e.dur}ms ${e.valid ? '✓' : '✖'}</td></tr>`;
+                    }).join('')}
+                </tbody>
+            </table>`;
     }
 
     function displayTestReport(results) {
@@ -16270,6 +17439,8 @@
                 const overlay = document.getElementById('test-report-overlay');
                 if (overlay) overlay.style.display = 'flex';
             });
+        } else if (window.location.search.includes('bench=ai')) {
+            runAiBenchmark();
         } else {
             gameState = 'SETUP';
             openSettingsModal();
