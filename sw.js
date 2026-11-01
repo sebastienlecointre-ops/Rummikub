@@ -2,7 +2,7 @@ self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open('rummikub-pwa-v1').then((cache) => {
       return cache.addAll([
-        './Rummikub.html',
+        './index.html',
         './manifest.json'
       ]);
     })
