@@ -1968,6 +1968,7 @@
             display: flex;
             flex-direction: column;
             bottom: calc(var(--tile-h) * 2 + 76px);
+            container-type: inline-size;
         }
         @keyframes contextSlideIn {
             from { opacity: 0; transform: translate(-50%, 8px); }
@@ -2024,6 +2025,11 @@
             flex: 1;
             min-width: 0;
             word-break: break-word;
+            cursor: pointer;
+        }
+        .context-text.expanded {
+            display: block !important;
+            -webkit-line-clamp: unset !important;
         }
         .context-actions {
             display: flex;
@@ -2077,6 +2083,18 @@
             font-weight: 600;
             line-height: 1.3;
         }
+        .demo-step-badge {
+            padding: 2px 6px;
+            border-radius: 6px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            font-family: var(--font-mono);
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            flex-shrink: 0;
+        }
         .context-panel.mode-demo .demo-step-badge {
             background: var(--info-bg);
             color: var(--info-text);
@@ -2088,12 +2106,6 @@
             background: var(--overlay-2);
             color: var(--ai-text);
             border: 1px solid var(--ai-color);
-            padding: 2px 8px;
-            border-radius: 6px;
-            font-size: 0.75rem;
-            font-weight: 700;
-            font-family: var(--font-mono);
-            white-space: nowrap;
         }
         .demo-nav-bar {
             display: flex;
@@ -2201,7 +2213,24 @@
                 display: none;
             }
         }
+        @container (max-width: 480px) {
+            .context-panel-body { padding: 6px 8px; gap: 4px; }
+            .context-header-row { align-items: flex-start; gap: 6px; }
+            .context-step-row { font-size: 0.82rem; line-height: 1.25; gap: 6px; }
+            .context-text { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+            #btn-context-replay { width: 32px; height: 32px; min-width: 32px; min-height: 32px; padding: 0; justify-content: center; }
+            #btn-context-replay span { display: none; }
+            .btn-context-close { width: 28px; height: 28px; min-width: 28px; min-height: 28px; }
+        }
         @media (max-width: 640px) {
+            .context-panel { width: calc(100% - 8px); }
+            .context-panel-body { padding: 6px 8px; gap: 4px; }
+            .context-header-row { align-items: flex-start; gap: 6px; }
+            .context-step-row { font-size: 0.82rem; line-height: 1.25; gap: 6px; }
+            .context-text { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+            #btn-context-replay { width: 32px; height: 32px; min-width: 32px; min-height: 32px; padding: 0; justify-content: center; }
+            #btn-context-replay span { display: none; }
+            .btn-context-close { width: 28px; height: 28px; min-width: 28px; min-height: 28px; }
             .hide-on-mobile-bar {
                 display: none !important;
             }
@@ -2603,7 +2632,7 @@
                 <div class="context-header-row">
                     <div class="context-step-row">
                         <span class="demo-step-badge" id="demo-step-badge" style="display:none;"></span>
-                        <span class="context-text" id="context-text"></span>
+                        <span class="context-text" id="context-text" onclick="this.classList.toggle('expanded')"></span>
                     </div>
                     <div class="context-actions" id="context-actions" style="display:none;"></div>
                     <button class="btn-icon btn-context-close" id="context-close-btn" type="button" onclick="handleContextCloseClick()" title="Fermer" aria-label="Fermer" style="display:none;">
@@ -4837,6 +4866,14 @@
         return true;
     }
 
+    function extractStepCounter(label) {
+        if (!label || typeof label !== 'string') return '';
+        if (label.includes('✓') || label.toLowerCase().includes('terminé')) return '✓';
+        const m = label.match(/(\d+\/\d+)/);
+        if (m) return m[1];
+        return '';
+    }
+
     function showContextPanel(options = {}) {
         if (contextPanelTimer) {
             clearTimeout(contextPanelTimer);
@@ -4850,6 +4887,10 @@
         contextPanelMode = mode;
 
         panel.className = `context-panel mode-${mode}`;
+
+        const panelTitle = options.title || (mode === 'demo' ? 'Démonstration' : (mode === 'ai-pass' ? "Tour de l'IA" : "Coup de l'IA"));
+        panel.title = panelTitle;
+        panel.setAttribute('aria-label', panelTitle);
 
         const rack = document.querySelector('.player-bottom-panel');
         if (rack) {
@@ -4865,14 +4906,27 @@
         const progressBar = document.getElementById('context-progress-bar');
         const progressFill = document.getElementById('context-progress-fill');
 
-        if (textEl) textEl.textContent = options.text || '';
+        if (textEl) {
+            textEl.textContent = options.text || '';
+            textEl.title = options.text || '';
+            textEl.classList.remove('expanded');
+        }
         if (badgeEl) {
-            if (options.stepLabel) {
-                badgeEl.textContent = options.stepLabel;
-                badgeEl.style.display = 'inline-block';
-            } else if (options.title) {
-                badgeEl.textContent = options.title;
-                badgeEl.style.display = 'inline-block';
+            let icon = '';
+            let cnt = '';
+            if (mode === 'ai-playing') {
+                icon = '<i class="fa-solid fa-robot"></i>';
+                cnt = extractStepCounter(options.stepLabel || '');
+            } else if (mode === 'ai-summary' || mode === 'ai-pass') {
+                icon = '<i class="fa-solid fa-robot"></i>';
+                cnt = '';
+            } else if (mode === 'demo') {
+                icon = '<i class="fa-solid fa-lightbulb"></i>';
+                cnt = extractStepCounter(options.stepLabel || '');
+            }
+            if (icon) {
+                badgeEl.innerHTML = icon + cnt;
+                badgeEl.style.display = 'inline-flex';
             } else {
                 badgeEl.style.display = 'none';
             }
@@ -4884,12 +4938,8 @@
             if (closeBtn) closeBtn.style.display = 'none';
             if (progressBar) progressBar.style.display = 'none';
             if (actionsWrap) {
-                actionsWrap.innerHTML = `
-                    <button class="btn-demo danger" id="btn-context-skip" type="button" onclick="skipCurrentAnimation()" title="Passer l'animation (Échap)">
-                        <i class="fa-solid fa-forward-fast"></i> <span>Passer l'animation</span>
-                    </button>
-                `;
-                actionsWrap.style.display = 'flex';
+                actionsWrap.innerHTML = '';
+                actionsWrap.style.display = 'none';
             }
             contextPanelExpiresAt = null;
         } else if (mode === 'ai-summary') {
@@ -12542,90 +12592,122 @@
         });
 
         await runTestCase("4.6 Interaction : Aucune donnée de tuile stockée ne contient assignedValue ni assignedColor après une action", () => {
-            const jk = { id: 9600, value: 0, color: 'black', isJoker: true };
-            const t5 = { id: 9601, value: 5, color: 'red', isJoker: false };
-            const t6 = { id: 9602, value: 6, color: 'red', isJoker: false };
-            const t7 = { id: 9603, value: 7, color: 'red', isJoker: false };
+            const savedHand = playerHand.map(cloneTile);
+            const savedBoard = cloneRows(boardRows);
+            const savedBackupHand = backupPlayerHand.map(cloneTile);
+            try {
+                const jk = { id: 9600, value: 0, color: 'black', isJoker: true };
+                const t5 = { id: 9601, value: 5, color: 'red', isJoker: false };
+                const t6 = { id: 9602, value: 6, color: 'red', isJoker: false };
+                const t7 = { id: 9603, value: 7, color: 'red', isJoker: false };
 
-            boardRows = [{ id: 2601, type: 'run', tiles: [cloneTile(t5), cloneTile(t6)], jokerHints: {} }];
-            playerHand = [cloneTile(jk), cloneTile(t7)];
-            backupPlayerHand = [cloneTile(t5), cloneTile(t6), cloneTile(jk), cloneTile(t7)];
-            saveBackup();
+                boardRows = [{ id: 2601, type: 'run', tiles: [cloneTile(t5), cloneTile(t6)], jokerHints: {} }];
+                playerHand = [cloneTile(jk), cloneTile(t7)];
+                backupPlayerHand = [cloneTile(t5), cloneTile(t6), cloneTile(jk), cloneTile(t7)];
+                saveBackup();
 
-            const extractedJk = findAndExtractTile(9600, 'rack', -1).tile;
-            executeMoveToRow(extractedJk, 2601, 2, 'rack', null, 0, { isLeftHalf: false });
-            const extractedT7 = findAndExtractTile(9603, 'rack', -1).tile;
-            executeMoveToRow(extractedT7, 2601, 3, 'rack', null, 0);
+                const extractedJk = findAndExtractTile(9600, 'rack', -1).tile;
+                executeMoveToRow(extractedJk, 2601, 2, 'rack', null, 0, { isLeftHalf: false });
+                const extractedT7 = findAndExtractTile(9603, 'rack', -1).tile;
+                executeMoveToRow(extractedT7, 2601, 3, 'rack', null, 0);
 
-            for (const r of boardRows) {
-                for (const t of r.tiles) {
-                    assert(t.assignedValue === undefined, `Tuile ${t.id} sur plateau a assignedValue définie (${t.assignedValue})`);
-                    assert(t.assignedColor === undefined, `Tuile ${t.id} sur plateau a assignedColor définie (${t.assignedColor})`);
+                for (const r of boardRows) {
+                    for (const t of r.tiles) {
+                        assert(t.assignedValue === undefined, `Tuile ${t.id} sur plateau a assignedValue définie (${t.assignedValue})`);
+                        assert(t.assignedColor === undefined, `Tuile ${t.id} sur plateau a assignedColor définie (${t.assignedColor})`);
+                    }
                 }
+
+                const tToRack = findAndExtractTile(9603, 'board', 2601).tile;
+                executeMoveToRack(tToRack, -1, 'board', 2601, 3);
+
+                for (const t of playerHand) {
+                    assert(t.assignedValue === undefined, `Tuile ${t.id} dans chevalet a assignedValue définie (${t.assignedValue})`);
+                    assert(t.assignedColor === undefined, `Tuile ${t.id} dans chevalet a assignedColor définie (${t.assignedColor})`);
+                }
+
+                return "Toutes les tuiles en mémoire (boardRows et playerHand) sont strictement pures (sans assignedValue ni assignedColor)";
+            } finally {
+                playerHand = savedHand;
+                boardRows = savedBoard;
+                backupPlayerHand = savedBackupHand;
+                updateUI();
             }
-
-            const tToRack = findAndExtractTile(9603, 'board', 2601).tile;
-            executeMoveToRack(tToRack, -1, 'board', 2601, 3);
-
-            for (const t of playerHand) {
-                assert(t.assignedValue === undefined, `Tuile ${t.id} dans chevalet a assignedValue définie (${t.assignedValue})`);
-                assert(t.assignedColor === undefined, `Tuile ${t.id} dans chevalet a assignedColor définie (${t.assignedColor})`);
-            }
-
-            return "Toutes les tuiles en mémoire (boardRows et playerHand) sont strictement pures (sans assignedValue ni assignedColor)";
         });
 
         await runTestCase("4.7 Interaction : Animation de pioche avec updateUI concurrent -> tuile présente dans #player-rack, visible et unique", async () => {
             const rackEl = document.getElementById('player-rack');
             if (!rackEl) return "DOM non disponible";
 
-            const testTile = { id: 9799, value: 5, color: 'blue', isJoker: false };
-            playerHand = [cloneTile(testTile)];
-            newlyDrawnTileIds = new Set([9799]);
-            updateUI();
+            const savedHand = playerHand.map(cloneTile);
+            const savedBoard = cloneRows(boardRows);
+            const savedBackupHand = backupPlayerHand.map(cloneTile);
+            const savedDrawn = new Set(newlyDrawnTileIds);
+            try {
+                const testTile = { id: 9799, value: 5, color: 'blue', isJoker: false };
+                playerHand = [cloneTile(testTile)];
+                newlyDrawnTileIds = new Set([9799]);
+                updateUI();
 
-            const drawnEl = document.querySelector(`#player-rack .tile[data-tile-id="9799"]`);
-            assert(drawnEl !== null, "La tuile piochée doit être présente dans le chevalet");
+                const drawnEl = document.querySelector(`#player-rack .tile[data-tile-id="9799"]`);
+                assert(drawnEl !== null, "La tuile piochée doit être présente dans le chevalet");
 
-            // Lancement de l'animation
-            const animPromise = animateDrawnTile(testTile, drawnEl);
+                // Lancement de l'animation
+                const animPromise = animateDrawnTile(testTile, drawnEl);
 
-            // updateUI concurrent pendant l'animation
-            updateUI();
+                // updateUI concurrent pendant l'animation
+                updateUI();
 
-            await new Promise(r => setTimeout(r, 400));
-            await animPromise;
+                await new Promise(r => setTimeout(r, 400));
+                await animPromise;
 
-            const finalDrawnEl = document.querySelector(`#player-rack .tile[data-tile-id="9799"]`);
-            assert(finalDrawnEl !== null, "La tuile piochée doit être présente dans #player-rack après l'animation");
-            assert(!finalDrawnEl.classList.contains('draw-anim-pending'), "La tuile ne doit plus avoir la classe draw-anim-pending");
-            assert(window.getComputedStyle(finalDrawnEl).visibility !== 'hidden', "La tuile doit être visible dans #player-rack");
+                const finalDrawnEl = document.querySelector(`#player-rack .tile[data-tile-id="9799"]`);
+                assert(finalDrawnEl !== null, "La tuile piochée doit être présente dans #player-rack après l'animation");
+                assert(!finalDrawnEl.classList.contains('draw-anim-pending'), "La tuile ne doit plus avoir la classe draw-anim-pending");
+                assert(window.getComputedStyle(finalDrawnEl).visibility !== 'hidden', "La tuile doit être visible dans #player-rack");
 
-            const allDrawnInstances = document.querySelectorAll('.tile[data-tile-id="9799"]');
-            assert(allDrawnInstances.length === 1, `La tuile ne doit exister qu'en un seul exemplaire dans le document (trouvé ${allDrawnInstances.length})`);
+                const allDrawnInstances = document.querySelectorAll('.tile[data-tile-id="9799"]');
+                assert(allDrawnInstances.length === 1, `La tuile ne doit exister qu'en un seul exemplaire dans le document (trouvé ${allDrawnInstances.length})`);
 
-            newlyDrawnTileIds.clear();
-            return "Tuile piochée présente, visible et unique après updateUI concurrent pendant l'animation";
+                newlyDrawnTileIds.clear();
+                return "Tuile piochée présente, visible et unique après updateUI concurrent pendant l'animation";
+            } finally {
+                playerHand = savedHand;
+                boardRows = savedBoard;
+                backupPlayerHand = savedBackupHand;
+                newlyDrawnTileIds = savedDrawn;
+                updateUI();
+            }
         });
 
         await runTestCase("4.8 Interaction : Une tuile du chevalet posée sur le tapis ne garde aucune marge", () => {
-            const testTile = { id: 9801, value: 8, color: 'blue', isJoker: false };
-            playerHand = [cloneTile(testTile)];
-            saveBackup();
-            updateUI();
+            const savedHand = playerHand.map(cloneTile);
+            const savedBoard = cloneRows(boardRows);
+            const savedBackupHand = backupPlayerHand.map(cloneTile);
+            try {
+                const testTile = { id: 9801, value: 8, color: 'blue', isJoker: false };
+                playerHand = [cloneTile(testTile)];
+                saveBackup();
+                updateUI();
 
-            const rackTileEl = document.querySelector('.tile[data-tile-id="9801"]');
-            assert(rackTileEl !== null, "La tuile doit exister dans le chevalet");
-            rackTileEl.style.marginLeft = '12px';
+                const rackTileEl = document.querySelector('.tile[data-tile-id="9801"]');
+                assert(rackTileEl !== null, "La tuile doit exister dans le chevalet");
+                rackTileEl.style.marginLeft = '12px';
 
-            findAndExtractTile(9801, 'rack', -1);
-            executeMoveToNewRow(testTile, 'rack', null, 0);
+                findAndExtractTile(9801, 'rack', -1);
+                executeMoveToNewRow(testTile, 'rack', null, 0);
 
-            const boardTileEl = document.querySelector('.tile[data-tile-id="9801"]');
-            assert(boardTileEl !== null, "La tuile doit exister sur le tapis");
-            assert(boardTileEl.style.marginLeft === '' || boardTileEl.style.marginLeft === '0px', `La tuile sur le tapis ne doit avoir aucune marge (marginLeft: '${boardTileEl.style.marginLeft}')`);
+                const boardTileEl = document.querySelector('.tile[data-tile-id="9801"]');
+                assert(boardTileEl !== null, "La tuile doit exister sur le tapis");
+                assert(boardTileEl.style.marginLeft === '' || boardTileEl.style.marginLeft === '0px', `La tuile sur le tapis ne doit avoir aucune marge (marginLeft: '${boardTileEl.style.marginLeft}')`);
 
-            return "La tuile déplacée du chevalet vers le tapis a bien son marginLeft réinitialisé";
+                return "La tuile déplacée du chevalet vers le tapis a bien son marginLeft réinitialisé";
+            } finally {
+                playerHand = savedHand;
+                boardRows = savedBoard;
+                backupPlayerHand = savedBackupHand;
+                updateUI();
+            }
         });
 
         await runTestCase("4.9 Coup de l'IA : distinction stricte entre ai-placed, ai-moved et tuile neutre", () => {
@@ -13990,15 +14072,14 @@
 
                 await new Promise(r => setTimeout(r, 60));
                 assert(contextPanelMode === 'ai-playing', "Le panneau doit être en mode ai-playing pendant l'animation");
-                const skipBtn = document.getElementById('btn-context-skip');
-                assert(skipBtn !== null, "Le bouton #btn-context-skip doit exister");
+                assert(document.getElementById('btn-context-skip') === null, "#btn-context-skip ne doit pas exister pendant 'ai-playing'");
 
-                skipBtn.click();
+                window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
                 await animPromise;
 
                 assert(boardRows[0].tiles.length === 5, "Toutes les étapes doivent être appliquées immédiatement (5 tuiles)");
                 assert(aiHand.length === 0, "Toutes les tuiles IA doivent avoir été posées");
-                return "Aucun contrôle pause/suivant, et Passer l'animation applique immédiatement tous les coups";
+                return "Aucun bouton passer dans l'UI, et Échap applique immédiatement tous les coups";
             } finally {
                 aiSpeed = savedSpeed;
                 boardRows = savedBoard;
@@ -14087,6 +14168,11 @@
             const savedPool = pool.map(cloneTile);
             const savedSpeed = aiSpeed;
             const savedGen = gameGeneration;
+            const savedMatchHistory = JSON.parse(JSON.stringify(matchHistory));
+            const savedMatchFinished = matchFinished;
+            const savedCurrentRound = currentRound;
+            const savedConsecutivePassCount = consecutivePassCount;
+            const savedRoundStats = JSON.parse(JSON.stringify(roundStats));
             const origShow = showContextPanel;
             const origWorkerSolve = requestWorkerSolve;
             let capturedOptions = null;
@@ -14100,8 +14186,11 @@
                 aiHand = [
                     { id: 9871, value: 10, color: 'red', isJoker: false },
                     { id: 9872, value: 10, color: 'blue', isJoker: false },
-                    { id: 9873, value: 10, color: 'yellow', isJoker: false }
+                    { id: 9873, value: 10, color: 'yellow', isJoker: false },
+                    { id: 9874, value: 13, color: 'black', isJoker: false }
                 ];
+                playerHand = [1, 2, 3, 4, 5].map(v => ({ id: 99500 + v, value: v, color: 'red', isJoker: false }));
+                pool = [6, 7, 8, 9, 10].map(v => ({ id: 99500 + v, value: v, color: 'blue', isJoker: false }));
 
                 requestWorkerSolve = async () => ({
                     status: 'ok',
@@ -14120,6 +14209,9 @@
 
                 await aiTurn();
 
+                const goOverlay = document.getElementById('game-over-overlay');
+                assert(!goOverlay || goOverlay.style.display === 'none' || window.getComputedStyle(goOverlay).display === 'none', "#game-over-overlay ne doit pas être affiché");
+
                 assert(aiOpened === true, "L'IA doit avoir ouvert (aiOpened === true)");
                 assert(capturedOptions !== null && capturedOptions.mode === 'ai-summary', "Le panneau doit être affiché en mode ai-summary");
                 assert(contextPanelMode === 'ai-summary', "contextPanelMode doit valoir 'ai-summary'");
@@ -14130,6 +14222,8 @@
                 assert(panel && panel.style.display === 'none', "Le panneau doit être masqué automatiquement après le ttl");
                 return "Ouverture IA terminée en mode ai-summary puis masquée après ttl";
             } finally {
+                const goOverlay = document.getElementById('game-over-overlay');
+                if (goOverlay) goOverlay.style.display = 'none';
                 showContextPanel = origShow;
                 requestWorkerSolve = origWorkerSolve;
                 aiOpened = savedOpened;
@@ -14142,6 +14236,11 @@
                 playerHand = savedPHand;
                 pool = savedPool;
                 gameGeneration = savedGen;
+                matchHistory = savedMatchHistory;
+                matchFinished = savedMatchFinished;
+                currentRound = savedCurrentRound;
+                consecutivePassCount = savedConsecutivePassCount;
+                roundStats = savedRoundStats;
                 stopTurnTimer();
                 hideContextPanel('test-cleanup');
                 tileAssertSilenced = false;
@@ -14159,6 +14258,11 @@
             const savedSpeed = aiSpeed;
             const savedGen = gameGeneration;
             const savedOpened = aiOpened;
+            const savedMatchHistory = JSON.parse(JSON.stringify(matchHistory));
+            const savedMatchFinished = matchFinished;
+            const savedCurrentRound = currentRound;
+            const savedConsecutivePassCount = consecutivePassCount;
+            const savedRoundStats = JSON.parse(JSON.stringify(roundStats));
             const origShow = showContextPanel;
             const origWorkerSolve = requestWorkerSolve;
             let capturedOptions = null;
@@ -14170,8 +14274,11 @@
                 gameState = 'AI_TURN';
                 boardRows = [];
                 aiHand = [
-                    { id: 9881, value: 10, color: 'red', isJoker: false }
+                    { id: 9881, value: 10, color: 'red', isJoker: false },
+                    { id: 9882, value: 13, color: 'black', isJoker: false }
                 ];
+                playerHand = [1, 2, 3, 4, 5].map(v => ({ id: 99500 + v, value: v, color: 'red', isJoker: false }));
+                pool = [6, 7, 8, 9, 10].map(v => ({ id: 99500 + v, value: v, color: 'blue', isJoker: false }));
 
                 requestWorkerSolve = async () => ({
                     status: 'ok',
@@ -14187,6 +14294,9 @@
 
                 await aiTurn();
 
+                const goOverlay = document.getElementById('game-over-overlay');
+                assert(!goOverlay || goOverlay.style.display === 'none' || window.getComputedStyle(goOverlay).display === 'none', "#game-over-overlay ne doit pas être affiché");
+
                 assert(capturedOptions !== null && capturedOptions.mode === 'ai-pass', "Le panneau doit être en mode ai-pass");
                 assert(contextPanelMode === 'ai-pass', "contextPanelMode doit valoir 'ai-pass'");
                 const panel = document.getElementById('context-panel');
@@ -14196,6 +14306,8 @@
                 assert(panel && panel.style.display === 'none', "Le panneau doit être masqué automatiquement après le ttl");
                 return "Mode ai-pass affiché puis masqué automatiquement après son ttl";
             } finally {
+                const goOverlay = document.getElementById('game-over-overlay');
+                if (goOverlay) goOverlay.style.display = 'none';
                 showContextPanel = origShow;
                 requestWorkerSolve = origWorkerSolve;
                 aiOpened = savedOpened;
@@ -14208,6 +14320,11 @@
                 playerHand = savedPHand;
                 pool = savedPool;
                 gameGeneration = savedGen;
+                matchHistory = savedMatchHistory;
+                matchFinished = savedMatchFinished;
+                currentRound = savedCurrentRound;
+                consecutivePassCount = savedConsecutivePassCount;
+                roundStats = savedRoundStats;
                 stopTurnTimer();
                 hideContextPanel('test-cleanup');
                 tileAssertSilenced = false;
@@ -14354,6 +14471,10 @@
             const savedPool = pool.map(cloneTile);
             const savedAiOpened = aiOpened;
             const savedRoundStats = JSON.parse(JSON.stringify(roundStats));
+            const savedMatchHistory = JSON.parse(JSON.stringify(matchHistory));
+            const savedMatchFinished = matchFinished;
+            const savedCurrentRound = currentRound;
+            const savedConsecutivePassCount = consecutivePassCount;
             const savedOrigGetAiConfig = getAiConfig;
             const origRequestWorkerSolve = requestWorkerSolve;
             const origExecuteCleanedStepsAnimated = executeCleanedStepsAnimated;
@@ -14382,17 +14503,27 @@
                     { id: 9912, value: 2, color: 'blue', isJoker: false },
                     { id: 9913, value: 3, color: 'blue', isJoker: false }
                 ]}];
-                aiHand = [{ id: 9914, value: 4, color: 'blue', isJoker: false }];
+                aiHand = [
+                    { id: 9914, value: 4, color: 'blue', isJoker: false },
+                    { id: 9915, value: 13, color: 'black', isJoker: false }
+                ];
+                playerHand = [1, 2, 3, 4, 5].map(v => ({ id: 99500 + v, value: v, color: 'red', isJoker: false }));
+                pool = [6, 7, 8, 9, 10].map(v => ({ id: 99500 + v, value: v, color: 'blue', isJoker: false }));
                 aiOpened = true;
 
                 const t0 = Date.now();
                 await aiTurn();
+
+                const goOverlay = document.getElementById('game-over-overlay');
+                assert(!goOverlay || goOverlay.style.display === 'none' || window.getComputedStyle(goOverlay).display === 'none', "#game-over-overlay ne doit pas être affiché");
 
                 const elapsed = timeAtFirstStep - t0;
                 assert(timeAtFirstStep > 0, "executeCleanedStepsAnimated doit avoir été appelé");
                 assert(elapsed >= 180, `Attendu au moins minThinkMs (200 ms, tolérance 180 ms), obtenu ${elapsed} ms`);
                 return `Temps de réflexion mesuré : ${elapsed} ms (>= 200 ms attendus)`;
             } finally {
+                const goOverlay = document.getElementById('game-over-overlay');
+                if (goOverlay) goOverlay.style.display = 'none';
                 stopTurnTimer();
                 gameState = savedState;
                 aiSpeed = savedAiSpeed;
@@ -14405,6 +14536,10 @@
                 pool = savedPool;
                 aiOpened = savedAiOpened;
                 roundStats = savedRoundStats;
+                matchHistory = savedMatchHistory;
+                matchFinished = savedMatchFinished;
+                currentRound = savedCurrentRound;
+                consecutivePassCount = savedConsecutivePassCount;
                 getAiConfig = savedOrigGetAiConfig;
                 requestWorkerSolve = origRequestWorkerSolve;
                 executeCleanedStepsAnimated = origExecuteCleanedStepsAnimated;
@@ -15081,6 +15216,14 @@
                     board.style.maxHeight = '400px';
                 }
                 updateUI();
+
+                ['game-over-overlay', 'welcome-settings-overlay', 'starter-draw-overlay', 'test-report-overlay'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.style.display = 'none';
+                });
+                toggleDrawer(false);
+                toggleLogPanel(false);
+
                 document.body.classList.add('is-dragging');
                 await new Promise(r => requestAnimationFrame(r));
 
@@ -15467,6 +15610,349 @@
             assert(currentBubble === null, "currentBubble doit être null");
             assert(bubbleQueue.length === 0, "bubbleQueue doit être vide");
             return "Bulle en cours et file d'attente vidées par clearAllNotifications()";
+        });
+
+        await runTestCase("Messages : ancien système supprimé", () => {
+            clearAllNotifications();
+            try {
+                assert(document.querySelector('.toast-msg') === null, "Aucun élément .toast-msg ne doit exister");
+                assert(document.getElementById('toast-container') === null, "L'élément #toast-container ne doit plus exister");
+                assert(typeof window.showToast === 'undefined', "window.showToast ne doit plus exister");
+                return "Ancien système de toast complètement supprimé";
+            } finally {
+                clearAllNotifications();
+            }
+        });
+
+        await runTestCase("Messages : un tour d'IA qui pose des tuiles ne crée aucune bulle", async () => {
+            clearAllNotifications();
+            const savedState = gameState;
+            const savedOpened = aiOpened;
+            const savedSpeed = aiSpeed;
+            const savedBoard = cloneRows(boardRows);
+            const savedBBoard = cloneRows(backupBoardRows);
+            const savedBHand = backupPlayerHand.map(cloneTile);
+            const savedAiHand = aiHand.map(cloneTile);
+            const savedPHand = playerHand.map(cloneTile);
+            const savedPool = pool.map(cloneTile);
+            const savedGen = gameGeneration;
+            const savedMatchHistory = JSON.parse(JSON.stringify(matchHistory));
+            const savedMatchFinished = matchFinished;
+            const origWorkerSolve = requestWorkerSolve;
+            try {
+                tileAssertSilenced = true;
+                aiSpeed = 'instant';
+                aiOpened = true;
+                gameState = 'AI_TURN';
+                boardRows = [];
+                aiHand = [
+                    { id: 9871, value: 10, color: 'red', isJoker: false },
+                    { id: 9872, value: 10, color: 'blue', isJoker: false },
+                    { id: 9873, value: 10, color: 'yellow', isJoker: false }
+                ];
+
+                requestWorkerSolve = async () => ({
+                    status: 'ok',
+                    score: 30,
+                    steps: [
+                        { action: 'place_from_hand', tileId: 9871, toLineId: 9870, type: 'group' },
+                        { action: 'place_from_hand', tileId: 9872, toLineId: 9870, type: 'group' },
+                        { action: 'place_from_hand', tileId: 9873, toLineId: 9870, type: 'group' }
+                    ]
+                });
+
+                await aiTurn();
+
+                const bubbles = document.querySelectorAll('#notify-bubbles .notify-bubble');
+                assert(bubbles.length === 0, `Aucune bulle attendue, obtenu ${bubbles.length}`);
+                assert(currentBubble === null, "currentBubble doit être null");
+                assert(bubbleQueue.length === 0, `bubbleQueue doit être vide, longueur ${bubbleQueue.length}`);
+                return "Tour de pose IA sans aucune bulle de notification";
+            } finally {
+                stopTurnTimer();
+                hideContextPanel('test-cleanup');
+                const goOverlay = document.getElementById('game-over-overlay');
+                if (goOverlay) goOverlay.style.display = 'none';
+                requestWorkerSolve = origWorkerSolve;
+                aiOpened = savedOpened;
+                gameState = savedState;
+                aiSpeed = savedSpeed;
+                boardRows = savedBoard;
+                backupBoardRows = savedBBoard;
+                backupPlayerHand = savedBHand;
+                aiHand = savedAiHand;
+                playerHand = savedPHand;
+                pool = savedPool;
+                gameGeneration = savedGen;
+                matchHistory = savedMatchHistory;
+                matchFinished = savedMatchFinished;
+                tileAssertSilenced = false;
+                clearAllNotifications();
+            }
+        });
+
+        await runTestCase("Messages : « Vous piochez » une seule bulle", () => {
+            clearAllNotifications();
+            try {
+                notify({ text: 'Vous piochez le 7 bleu', kind: 'info', channel: 'bubble', key: 'player-draw' });
+                notify({ text: 'Vous piochez le 8 rouge', kind: 'info', channel: 'bubble', key: 'player-draw' });
+                const bubbles = document.querySelectorAll('#notify-bubbles .notify-bubble');
+                assert(bubbles.length === 1, `Une seule bulle attendue, obtenu ${bubbles.length}`);
+                assert(bubbleQueue.length === 0, `bubbleQueue doit être vide, longueur ${bubbleQueue.length}`);
+                return "Une seule bulle affichée et file vide grâce à la clé 'player-draw'";
+            } finally {
+                clearAllNotifications();
+            }
+        });
+
+        await runTestCase("Messages : validation invalide = bulle d'alerte", () => {
+            clearAllNotifications();
+            const savedState = gameState;
+            const savedOpened = playerOpened;
+            const savedBoard = cloneRows(boardRows);
+            const savedBBoard = cloneRows(backupBoardRows);
+            const savedHand = playerHand.map(cloneTile);
+            const savedBHand = backupPlayerHand.map(cloneTile);
+            const savedValidation = liveValidation;
+            const savedErrors = lastValidationErrors;
+            try {
+                tileAssertSilenced = true;
+                gameState = 'PLAYER_TURN';
+                playerOpened = true;
+
+                const t1 = { id: 9941, value: 5, color: 'red', isJoker: false };
+                const t2 = { id: 9942, value: 6, color: 'red', isJoker: false };
+                const t3 = { id: 9943, value: 8, color: 'blue', isJoker: false };
+
+                backupBoardRows = [];
+                boardRows = [{ id: 9940, type: 'run', tiles: [t1, t2] }];
+                backupPlayerHand = [t1, t2, t3];
+                playerHand = [t3];
+
+                validatePlayerTurn();
+
+                const bubble = document.querySelector('#notify-bubbles .notify-bubble');
+                assert(bubble !== null, "Une bulle doit être affichée lors d'une validation invalide");
+                assert(bubble.classList.contains('kind-alert'), "La bulle affichée doit avoir la classe kind-alert");
+                return "Bulle d'alerte kind-alert bien affichée en cas de validation invalide";
+            } finally {
+                gameState = savedState;
+                playerOpened = savedOpened;
+                boardRows = savedBoard;
+                backupBoardRows = savedBBoard;
+                playerHand = savedHand;
+                backupPlayerHand = savedBHand;
+                liveValidation = savedValidation;
+                lastValidationErrors = savedErrors;
+                clearInvalidMeldErrors();
+                tileAssertSilenced = false;
+                clearAllNotifications();
+            }
+        });
+
+        await runTestCase("Messages : 2 changements d'affichage rapides = 1 bulle", () => {
+            clearAllNotifications();
+            const savedLayout = boardLayoutMode;
+            const savedStorage = localStorage.getItem('rummikub_board_layout');
+            try {
+                setBoardLayoutMode('columns');
+                setBoardLayoutMode('flow');
+                const bubbles = document.querySelectorAll('#notify-bubbles .notify-bubble');
+                assert(bubbles.length === 1, `Une seule bulle attendue, obtenu ${bubbles.length}`);
+                assert(bubbleQueue.length === 0, `bubbleQueue doit être vide, longueur ${bubbleQueue.length}`);
+                return "2 changements de disposition successifs avec la même clé produisent une seule bulle sans file d'attente";
+            } finally {
+                setBoardLayoutMode(savedLayout);
+                if (savedStorage !== null) localStorage.setItem('rummikub_board_layout', savedStorage);
+                else localStorage.removeItem('rummikub_board_layout');
+                clearAllNotifications();
+            }
+        });
+
+        await runTestCase("Historique : une seule entrée par message et bonne catégorie", () => {
+            clearAllNotifications();
+            const savedLogEntries = JSON.parse(JSON.stringify(logEntries));
+            const savedFullLogsHistory = [...fullLogsHistory];
+            const savedUnreadLogCount = unreadLogCount;
+            try {
+                const n = logEntries.length;
+                notify({ text: 'Test double', kind: 'info', channel: 'both', logTag: '[IA]' });
+                assert(logEntries.length === n + 1, `logEntries.length attendu ${n + 1}, obtenu ${logEntries.length}`);
+                assert(logEntries[logEntries.length - 1].cat === 'ai', `catégorie attendue 'ai', obtenu '${logEntries[logEntries.length - 1].cat}'`);
+
+                notify({ text: 'Test log', kind: 'info', channel: 'log', logTag: '[VOTRE TOUR]' });
+                assert(logEntries.length === n + 2, `logEntries.length attendu ${n + 2}, obtenu ${logEntries.length}`);
+                assert(logEntries[logEntries.length - 1].cat === 'player', `catégorie attendue 'player', obtenu '${logEntries[logEntries.length - 1].cat}'`);
+
+                return "Une seule entrée par message dans l'historique et catégories respectées ('ai' et 'player')";
+            } finally {
+                logEntries = savedLogEntries;
+                fullLogsHistory = savedFullLogsHistory;
+                unreadLogCount = savedUnreadLogCount;
+                updateTickerUnreadBadge();
+                clearAllNotifications();
+            }
+        });
+
+        await runTestCase("Bulles : niveau d'affichage", () => {
+            const bubbles = document.getElementById('notify-bubbles');
+            const drawerOverlay = document.querySelector('.mobile-drawer-overlay');
+            const settingsOverlay = document.getElementById('welcome-settings-overlay');
+            assert(bubbles !== null, "#notify-bubbles doit exister");
+            assert(drawerOverlay !== null, ".mobile-drawer-overlay doit exister");
+            assert(settingsOverlay !== null, "#welcome-settings-overlay doit exister");
+
+            const zBubbles = parseInt(window.getComputedStyle(bubbles).zIndex, 10);
+            const zDrawer = parseInt(window.getComputedStyle(drawerOverlay).zIndex, 10);
+            const zSettings = parseInt(window.getComputedStyle(settingsOverlay).zIndex, 10);
+
+            assert(zBubbles > zDrawer, `z-index de #notify-bubbles (${zBubbles}) doit être supérieur à celui de .mobile-drawer-overlay (${zDrawer})`);
+            assert(zBubbles < zSettings, `z-index de #notify-bubbles (${zBubbles}) doit être inférieur à celui de #welcome-settings-overlay (${zSettings})`);
+
+            return `z-index vérifiés : drawer (${zDrawer}) < bulles (${zBubbles}) < réglages (${zSettings})`;
+        });
+
+        await runTestCase("Bulles : messages périmés abandonnés", () => {
+            clearAllNotifications();
+            try {
+                bubbleQueue.push({
+                    text: 'Vieux message',
+                    kind: 'info',
+                    priority: 0,
+                    ttlMs: 2000,
+                    createdAt: Date.now() - 5000
+                });
+                processNextBubble();
+                assert(document.querySelector('#notify-bubbles .notify-bubble') === null, "Aucune bulle ne doit être affichée pour un message info périmé");
+
+                bubbleQueue.push({
+                    text: 'Vieille alerte',
+                    kind: 'alert',
+                    priority: 3,
+                    ttlMs: 2000,
+                    createdAt: Date.now() - 5000
+                });
+                processNextBubble();
+                const alertBubble = document.querySelector('#notify-bubbles .notify-bubble.kind-alert');
+                assert(alertBubble !== null, "Une bulle d'alerte (.notify-bubble.kind-alert) doit être affichée");
+
+                return "Message info périmé ignoré et alerte périmée affichée";
+            } finally {
+                clearAllNotifications();
+            }
+        });
+
+        await runTestCase("Panneau : variable --context-panel-h", () => {
+            const board = document.getElementById('board-container');
+            const panel = document.getElementById('context-panel');
+            assert(board !== null, "#board-container doit exister");
+            assert(panel !== null, "#context-panel doit exister");
+
+            try {
+                showContextPanel({ mode: 'demo', text: 'Test' });
+                const expectedH = `${panel.offsetHeight + 12}px`;
+                assert(board.style.getPropertyValue('--context-panel-h') === expectedH, `La variable --context-panel-h doit valoir '${expectedH}'`);
+
+                hideContextPanel();
+                assert(board.style.getPropertyValue('--context-panel-h') === '', "La variable --context-panel-h doit être vide après hideContextPanel()");
+
+                return "Variable --context-panel-h fixée puis réinitialisée correctement";
+            } finally {
+                hideContextPanel();
+            }
+        });
+
+        await runTestCase("Code mort : getStepDescription supprimée", () => {
+            assert(typeof window.getStepDescription === 'undefined', "window.getStepDescription doit être supprimée (undefined)");
+            return "window.getStepDescription est bien undefined";
+        });
+
+        await runTestCase("Garde-fou : aucune fenêtre plein écran laissée ouverte par les tests", () => {
+            const goOverlay = document.getElementById('game-over-overlay');
+            const starterOverlay = document.getElementById('starter-draw-overlay');
+            const settingsOverlay = document.getElementById('welcome-settings-overlay');
+            assert(goOverlay !== null, "#game-over-overlay doit exister");
+            assert(starterOverlay !== null, "#starter-draw-overlay doit exister");
+            assert(settingsOverlay !== null, "#welcome-settings-overlay doit exister");
+
+            assert(window.getComputedStyle(goOverlay).display === 'none', "#game-over-overlay doit avoir display 'none'");
+            assert(window.getComputedStyle(starterOverlay).display === 'none', "#starter-draw-overlay doit avoir display 'none'");
+            assert(window.getComputedStyle(settingsOverlay).display === 'none', "#welcome-settings-overlay doit avoir display 'none'");
+            return "Toutes les fenêtres plein écran sont bien fermées";
+        });
+
+        await runTestCase("8.12 Badge compact sans texte de titre en mode ai-summary", () => {
+            const panel = document.getElementById('context-panel');
+            const badgeEl = document.getElementById('demo-step-badge');
+            assert(panel && badgeEl, "Le panneau et le badge doivent exister");
+            try {
+                showContextPanel({ mode: 'ai-summary', title: "Coup de l'IA", text: "Résumé du coup" });
+                const badgeText = badgeEl.textContent.trim();
+                assert(!badgeText.includes("Coup"), "Le texte du badge ne doit pas contenir 'Coup'");
+                assert(badgeText.length <= 5, `Le texte du badge doit avoir au plus 5 caractères, obtenu: '${badgeText}' (${badgeText.length})`);
+                const titleOrAria = (panel.title || '') + ' ' + (panel.getAttribute('aria-label') || '');
+                assert(titleOrAria.includes("Coup de l'IA"), "Le titre ou aria-label du panneau doit contenir 'Coup de l'IA'");
+                return "Badge sans titre textuel (<= 5 car.) et 'Coup de l'IA' présent dans title/aria-label";
+            } finally {
+                hideContextPanel('test-cleanup');
+            }
+        });
+
+        await runTestCase("8.13 Badge compact étape 2/5 et actions masquées en mode ai-playing", () => {
+            const badgeEl = document.getElementById('demo-step-badge');
+            const actionsWrap = document.getElementById('context-actions');
+            assert(badgeEl && actionsWrap, "Le badge et les actions doivent exister");
+            try {
+                showContextPanel({ mode: 'ai-playing', stepLabel: 'Étape 2/5', text: "L'IA pose le 5 bleu" });
+                const badgeText = badgeEl.textContent.trim();
+                assert(badgeText === "2/5", `Le texte du badge doit être exactement '2/5', obtenu: '${badgeText}'`);
+                assert(actionsWrap.style.display === 'none' || window.getComputedStyle(actionsWrap).display === 'none', "#context-actions doit être masqué");
+                return "Badge affiche '2/5' et #context-actions est masqué";
+            } finally {
+                hideContextPanel('test-cleanup');
+            }
+        });
+
+        await runTestCase("8.14 Largeur utile du texte contextuel sur mobile (>= 70%)", () => {
+            const panel = document.getElementById('context-panel');
+            const textEl = document.getElementById('context-text');
+            assert(panel && textEl, "Le panneau et son texte doivent exister");
+            const savedWidth = panel.style.width;
+            const savedReplay = aiLastTurnReplay;
+            try {
+                aiLastTurnReplay = null;
+                panel.style.width = '344px';
+                showContextPanel({
+                    mode: 'ai-summary',
+                    title: "Coup de l'IA",
+                    text: "L'IA a posé 4 tuiles et réorganisé 2 tuiles de la table pour former de nouvelles combinaisons sur le plateau de jeu."
+                });
+                const panelW = panel.clientWidth;
+                const textW = textEl.clientWidth;
+                assert(panelW > 0, "panel.clientWidth doit être > 0");
+                assert(textW >= panelW * 0.7, `clientWidth du texte (${textW}px) doit être >= 70% de la largeur du panneau (${panelW}px, ratio: ${(textW / panelW).toFixed(2)})`);
+                return `clientWidth texte = ${textW}px (${Math.round((textW / panelW) * 100)}% de ${panelW}px >= 70%)`;
+            } finally {
+                panel.style.width = savedWidth;
+                aiLastTurnReplay = savedReplay;
+                hideContextPanel('test-cleanup');
+            }
+        });
+
+        await runTestCase("Garde-fou : aucun nom de test en double", () => {
+            const names = testResults.map(r => r.name);
+            const nameSet = new Set(names);
+            if (nameSet.size !== testResults.length) {
+                const counts = {};
+                const duplicates = [];
+                for (const n of names) {
+                    counts[n] = (counts[n] || 0) + 1;
+                    if (counts[n] === 2) duplicates.push(n);
+                }
+                assert(false, `Noms de test en double détectés : ${duplicates.join(', ')}`);
+            }
+            assert(nameSet.size === testResults.length, "Aucun nom de test en double");
+            return `Tous les ${nameSet.size} tests ont des noms uniques`;
         });
         } finally {
             setBoardLayoutMode(savedBoardLayoutMode);
