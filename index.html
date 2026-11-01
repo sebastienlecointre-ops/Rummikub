@@ -4673,8 +4673,9 @@
                         bestHandPlaced = placedSoFar;
                         const minAllowed = Math.max(1, bestHandPlaced - 2);
                         candidateSolutions = candidateSolutions.filter(c => c.handPlaced >= minAllowed);
-                        if (!holdPossible && bestHandPlaced === liveHandTotal && liveHandTotal > 0) optimal = true;
                     }
+                    // Arrêt anticipé : coup optimal, sauf s'il serait rejeté par la règle « garder le joker »
+                    if (placedSoFar === liveHandTotal && liveHandTotal > 0 && (!holdPossible || candHandJokers === 0 || placedSoFar > 2)) optimal = true;
                     if (placedSoFar >= Math.max(1, bestHandPlaced - 2)) saveCandidate(placedSoFar, candHandJokers);
                     if (optimal) return;
                 }
@@ -17088,6 +17089,31 @@
             const placedIds = new Set((res.steps || []).filter(s => s.action === 'place_from_hand').map(s => s.tileId));
             assert(placedIds.has(99794) && placedIds.has(99795), "12 bleu et 13 bleu doivent être posés");
             return "12 bleu et 13 bleu posés (arbitrage bnb / tactique sur les points restants)";
+        });
+
+        await runTestCase("IA Expert : arrêt anticipé quand le coup optimal pose plus de 2 tuiles", async () => {
+            const board = [{ id: 99801, type: 'run', tiles: [
+                { id: 99802, value: 4, color: 'red', isJoker: false },
+                { id: 99803, value: 5, color: 'red', isJoker: false },
+                { id: 99804, value: 6, color: 'red', isJoker: false }
+            ]}];
+            const hand = [
+                { id: 99805, value: 0, color: 'black', isJoker: true },
+                { id: 99806, value: 7, color: 'red', isJoker: false },
+                { id: 99807, value: 8, color: 'red', isJoker: false },
+                { id: 99808, value: 9, color: 'red', isJoker: false }
+            ];
+            const t0 = performance.now();
+            const res = await requestWorkerSolve(hand, board, true, { profile: 'expert', aiStyle: 'strategic', opponentHandCount: 14, poolCount: 40, budgetMs: 3000 });
+            const dur = performance.now() - t0;
+            assert(res.status === 'ok', `Status attendu 'ok', obtenu '${res.status}'`);
+            const placedIds = new Set((res.steps || []).filter(s => s.action === 'place_from_hand').map(s => s.tileId));
+            assert(placedIds.has(99806) && placedIds.has(99807) && placedIds.has(99808), "Les 3 tuiles rouges doivent être posées");
+            assert(res.optimal === true, `optimal attendu true, obtenu ${res.optimal}`);
+            assert(dur < 500, `Réponse attendue en moins de 500 ms (budget 3000 ms), obtenu ${Math.round(dur)} ms`);
+            const after = applySteps({ playerHand: hand, boardRows: board }, remapNewRowIds(res.steps, board));
+            assert(validateTurn(board, after.boardRows, hand, after.playerHand, true).valid, "Coup invalide");
+            return `Arrêt anticipé en ${Math.round(dur)} ms au lieu d'attendre les 3000 ms`;
         });
 
         await runTestCase("Garde-fou : aucune fenêtre plein écran laissée ouverte par les tests", () => {
