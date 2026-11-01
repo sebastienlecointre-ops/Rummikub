@@ -938,14 +938,12 @@
         .rack-area {
             display: flex;
             flex-wrap: wrap;
-            gap: 6px 14px;
-            align-content: flex-start;
-            min-height: calc((var(--tile-h) * 2) + 6px);
-        }
-        .rack-group {
-            display: flex;
-            flex-wrap: wrap;
             gap: 6px;
+            align-content: flex-start;
+            min-height: var(--tile-h);
+        }
+        #player-rack .tile.rack-group-start {
+            margin-left: 8px;
         }
 
         /* ACTIONS BARRE INFÉRIEURE */
@@ -2286,6 +2284,9 @@
             .top-navbar {
                 padding: 6px 8px;
                 gap: 6px;
+            }
+            #player-rack .tile.rack-group-start {
+                margin-left: 6px;
             }
             #btn-layout-toggle {
                 min-width: 36px;
@@ -6692,6 +6693,25 @@
         sc.classList.toggle('has-more', hasMore);
     }
 
+    function updateRackHeight() {
+        if (pointerState.isDragging || document.body.classList.contains('is-dragging')) return;
+        const rack = document.getElementById('player-rack');
+        const sc = document.querySelector('.rack-scroll-container');
+        if (!rack || !sc) return;
+        const tiles = rack.querySelectorAll('.tile');
+        let lines = 1;
+        if (tiles.length > 0) {
+            const tops = new Set();
+            tiles.forEach(t => tops.add(t.offsetTop));
+            lines = tops.size;
+        }
+        const isPortrait = window.matchMedia ? window.matchMedia('(orientation: portrait)').matches : window.innerHeight > window.innerWidth;
+        const maxRows = (window.innerWidth <= 640 && isPortrait) ? 4 : 3;
+        const rows = Math.max(1, Math.min(lines, maxRows));
+        sc.style.maxHeight = `min(calc(var(--tile-h) * ${rows} + ${(rows - 1) * 6 + 12}px), 40dvh)`;
+        updateRackScrollIndicator();
+    }
+
     async function computeCandidateProposals(hand, board, isOpened) {
         const proposals = [];
 
@@ -9257,6 +9277,7 @@
             clearTapSelection();
             updateUI();
         }
+        updateRackHeight();
     }
 
     function createPointerGhost(tile, x, y) {
@@ -9303,6 +9324,7 @@
 
         if (wasDragging) {
             updateUI();
+            updateRackHeight();
         }
     }
 
@@ -9590,7 +9612,7 @@
         if (rack) {
             rack.addEventListener('click', (e) => {
                 if (!tapSelectedTile) return;
-                if (e.target === rack || e.target.classList.contains('rack-group') || (e.target.closest('#player-rack') && !e.target.closest('.tile'))) {
+                if (e.target === rack || (e.target.closest('#player-rack') && !e.target.closest('.tile'))) {
                     const { tile: t, sourceIndex, splitContext } = findAndExtractTile(tapSelectedTile.id, tapSelectedTile.sourceZone, tapSelectedTile.sourceRowId);
                     if (t) executeMoveToRack(t, -1, tapSelectedTile.sourceZone, tapSelectedTile.sourceRowId, sourceIndex, splitContext);
                 }
@@ -10119,10 +10141,8 @@
 
         // 4. Rendu réconcilié du chevalet joueur
         if (rackEl && !lightweight) {
-            const groups = [];
-            let currentGroup = [];
-            let currentGroupKey = null;
-
+            let lastGroupKey = null;
+            const desiredTileEls = [];
             for (let i = 0; i < playerHand.length; i++) {
                 const current = playerHand[i];
                 let groupKey = 'all';
@@ -10131,37 +10151,18 @@
                 } else if (sortMode === 'color') {
                     groupKey = current.isJoker ? 'joker' : current.color;
                 }
-
-                if (i === 0 || groupKey !== currentGroupKey) {
-                    if (currentGroup.length > 0) groups.push(currentGroup);
-                    currentGroup = [current];
-                    currentGroupKey = groupKey;
+                const existing = tileElMap.get(String(current.id));
+                const tileEl = createOrUpdateTileElement(current, 'rack', -1, existing);
+                if (sortMode !== 'manual' && i > 0 && groupKey !== lastGroupKey) {
+                    tileEl.classList.add('rack-group-start');
                 } else {
-                    currentGroup.push(current);
+                    tileEl.classList.remove('rack-group-start');
                 }
+                lastGroupKey = groupKey;
+                desiredTileEls.push(tileEl);
             }
-            if (currentGroup.length > 0) groups.push(currentGroup);
-
-            const existingGroups = Array.from(rackEl.children).filter(c => c.classList.contains('rack-group'));
-            const desiredGroupElements = [];
-
-            for (let gIdx = 0; gIdx < groups.length; gIdx++) {
-                const groupTiles = groups[gIdx];
-                let groupEl = existingGroups[gIdx];
-                if (!groupEl) {
-                    groupEl = document.createElement('div');
-                    groupEl.className = 'rack-group';
-                }
-                const desiredTileEls = [];
-                for (let t of groupTiles) {
-                    const existing = tileElMap.get(String(t.id));
-                    const tileEl = createOrUpdateTileElement(t, 'rack', -1, existing);
-                    desiredTileEls.push(tileEl);
-                }
-                reconcileChildren(groupEl, desiredTileEls);
-                desiredGroupElements.push(groupEl);
-            }
-            reconcileChildren(rackEl, desiredGroupElements);
+            reconcileChildren(rackEl, desiredTileEls);
+            updateRackHeight();
         }
 
         // 5. Rendu réconcilié du plateau
@@ -10865,7 +10866,7 @@
             badge.remove();
         }
 
-        el.classList.remove('highlight-new', 'placed-this-turn', 'ai-placed', 'ai-moved', 'tile-selected-tap', 'tile-hint-candidate');
+        el.classList.remove('highlight-new', 'placed-this-turn', 'ai-placed', 'ai-moved', 'tile-selected-tap', 'tile-hint-candidate', 'rack-group-start');
         if (zone === 'rack') {
             if (newlyDrawnTileIds.has(tile.id)) {
                 el.classList.add('highlight-new');
@@ -15939,6 +15940,98 @@
             }
         });
 
+        await runTestCase("Chevalet à plat et hauteur adaptative : regroupement, drag et dimensions", () => {
+            const savedHand = playerHand.map(cloneTile);
+            const savedBoard = cloneRows(boardRows);
+            const savedSort = sortMode;
+            const rackEl = document.getElementById('player-rack');
+            const sc = document.querySelector('.rack-scroll-container');
+            const savedRackW = rackEl ? rackEl.style.width : '';
+            const savedScMaxH = sc ? sc.style.maxHeight : '';
+
+            try {
+                tileAssertSilenced = true;
+                sortMode = 'color';
+                playerHand = [
+                    { id: 99101, value: 3, color: 'blue', isJoker: false },
+                    { id: 99102, value: 5, color: 'blue', isJoker: false },
+                    { id: 99103, value: 2, color: 'red', isJoker: false },
+                    { id: 99104, value: 7, color: 'red', isJoker: false },
+                    { id: 99105, value: 4, color: 'yellow', isJoker: false },
+                    { id: 99106, value: 9, color: 'yellow', isJoker: false }
+                ];
+                sortPlayerHand();
+                updateUI();
+
+                assert(rackEl.querySelectorAll('.rack-group').length === 0, "#player-rack ne doit contenir aucun élément .rack-group");
+                const rackTiles = Array.from(rackEl.children).filter(c => c.classList.contains('tile'));
+                assert(rackTiles.length === 6, "Toutes les tuiles doivent être des enfants directs de #player-rack");
+                const groupStarts = rackEl.querySelectorAll('.tile.rack-group-start');
+                assert(groupStarts.length === 2, `Exactement 2 tuiles doivent avoir .rack-group-start, obtenu ${groupStarts.length}`);
+                assert(!rackTiles[0].classList.contains('rack-group-start'), "La première tuile ne doit pas avoir .rack-group-start");
+
+                sortMode = 'manual';
+                updateUI();
+                assert(rackEl.querySelectorAll('.tile.rack-group-start').length === 0, "En mode 'manual', aucune tuile ne doit avoir .rack-group-start");
+
+                playerHand = Array.from({ length: 24 }, (_, i) => ({ id: 99200 + i, value: (i % 13) + 1, color: COLORS[i % 4], isJoker: false }));
+                sortMode = 'color';
+                rackEl.style.width = '300px';
+                updateUI();
+                updateRackHeight();
+
+                const liveTile = rackEl.querySelector('.tile');
+                const tileH = liveTile ? liveTile.offsetHeight : 0;
+                assert(tileH > 0, `tileH doit être > 0, obtenu ${tileH} [tileH=${tileH}, clientHeight=${sc.clientHeight}]`);
+
+                const liveTiles = rackEl.querySelectorAll('.tile');
+                const tops = new Set();
+                liveTiles.forEach(t => tops.add(t.offsetTop));
+                const lines = tops.size;
+                assert(lines >= 3, `lines attendu >= 3 (24 tuiles dans 300px), obtenu lines=${lines} [tileH=${tileH}, lines=${lines}, clientHeight=${sc.clientHeight}]`);
+
+                const isPortrait = window.matchMedia ? window.matchMedia('(orientation: portrait)').matches : window.innerHeight > window.innerWidth;
+                const maxRows = (window.innerWidth <= 640 && isPortrait) ? 4 : 3;
+                const rows = Math.min(lines, maxRows);
+                const expected = rows * tileH + (rows - 1) * 6 + 12;
+
+                assert(sc.clientHeight <= expected + 2, `sc.clientHeight (${sc.clientHeight}px) doit être <= expected + 2 (${expected + 2}px) [tileH=${tileH}, lines=${lines}, rows=${rows}, expected=${expected}, clientHeight=${sc.clientHeight}]`);
+                assert(sc.clientHeight >= Math.min(rows, 2) * tileH, `sc.clientHeight (${sc.clientHeight}px) doit être >= Math.min(rows, 2) * tileH (${Math.min(rows, 2) * tileH}px) [tileH=${tileH}, lines=${lines}, rows=${rows}, expected=${expected}, clientHeight=${sc.clientHeight}]`);
+                assert(sc.clientHeight <= window.innerHeight * 0.40 + 2, `sc.clientHeight (${sc.clientHeight}px) doit être <= 40dvh (${window.innerHeight * 0.40 + 2}px) [tileH=${tileH}, lines=${lines}, rows=${rows}, expected=${expected}, clientHeight=${sc.clientHeight}]`);
+
+                document.body.classList.add('is-dragging');
+                const dragMaxH = sc.style.maxHeight;
+                playerHand.pop();
+                updateUI();
+                assert(sc.style.maxHeight === dragMaxH, "Avec body.is-dragging, style.maxHeight ne doit pas changer");
+                document.body.classList.remove('is-dragging');
+                playerHand = playerHand.slice(0, 3);
+                updateUI();
+                assert(sc.style.maxHeight !== dragMaxH, "Après suppression de is-dragging, style.maxHeight doit être recalculé");
+
+                sortMode = 'color';
+                playerHand = [{ id: 99301, value: 1, color: 'blue', isJoker: false }, { id: 99302, value: 1, color: 'red', isJoker: false }];
+                sortPlayerHand();
+                updateUI();
+                const { tile: extracted } = findAndExtractTile(99302, 'rack', -1);
+                executeMoveToNewRow(extracted);
+                const boardTileRed = document.querySelector('.board-container .tile[data-tile-id="99302"]');
+                assert(boardTileRed !== null && !boardTileRed.classList.contains('rack-group-start'), "Tuile plateau sans .rack-group-start");
+                assert(boardTileRed.style.marginLeft === '' || boardTileRed.style.marginLeft === '0px', "Tuile plateau avec marginLeft vide");
+
+                return "Chevalet à plat, hauteur dynamique (1 à maxRows), protection pendant le drag et nettoyage validés";
+            } finally {
+                document.body.classList.remove('is-dragging');
+                if (rackEl) rackEl.style.width = savedRackW;
+                if (sc) sc.style.maxHeight = savedScMaxH;
+                playerHand = savedHand;
+                boardRows = savedBoard;
+                sortMode = savedSort;
+                tileAssertSilenced = false;
+                updateUI();
+            }
+        });
+
         await runTestCase("Garde-fou : aucun nom de test en double", () => {
             const names = testResults.map(r => r.name);
             const nameSet = new Set(names);
@@ -16107,6 +16200,22 @@
         }
     }
 
+    let rackPanelObserver = null;
+    function setupRackPanelObserver() {
+        if (rackPanelObserver) return;
+        const rack = document.querySelector('.player-bottom-panel');
+        if (!rack) return;
+        if (typeof ResizeObserver !== 'undefined') {
+            rackPanelObserver = new ResizeObserver(() => {
+                const panel = document.getElementById('context-panel');
+                if (panel && panel.style.display !== 'none') {
+                    panel.style.bottom = `${rack.offsetHeight + 14}px`;
+                }
+            });
+            rackPanelObserver.observe(rack);
+        }
+    }
+
     if (!window.location.search.includes('navcheck=1')) {
         loadMatchSettings();
         loadBoardZoom();
@@ -16115,27 +16224,23 @@
         if (document.readyState !== 'loading') {
             setupContainerEventDelegation();
             setupBoardResizeObserver();
+            setupRackPanelObserver();
             setupActionButtonLongPress();
         } else {
             document.addEventListener('DOMContentLoaded', () => {
                 setupContainerEventDelegation();
                 setupBoardResizeObserver();
+                setupRackPanelObserver();
                 setupActionButtonLongPress();
             });
         }
 
         let resizeTimer = null;
-        window.addEventListener('resize', () => {
-            const panel = document.getElementById('context-panel');
-            const rack = document.querySelector('.player-bottom-panel');
-            if (panel && rack && panel.style.display !== 'none') {
-                panel.style.bottom = `${rack.offsetHeight + 14}px`;
-            }
-        });
         let lastResizeWidth = window.innerWidth;
         window.addEventListener('resize', () => {
             clearTimeout(resizeTimer);
             resizeTimer = setTimeout(() => {
+                updateRackHeight();
                 const newWidth = window.innerWidth;
                 const crossedThreshold =
                     (lastResizeWidth <= 1100 && newWidth > 1100) ||
@@ -16172,7 +16277,7 @@
     }
 </script>
 <script>
-  if ('serviceWorker' in navigator) {
+  if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('./sw.js')
         .then((reg) => console.log('Service Worker enregistré !', reg.scope))
