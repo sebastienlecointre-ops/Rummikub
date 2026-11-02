@@ -5205,9 +5205,19 @@
                     }
                 }
             }
-            const savedTimer = localStorage.getItem('rummikub_timer_enabled');
-            if (savedTimer !== null) {
-                timerEnabled = (savedTimer === '1');
+            if (!localStorage.getItem('rummikub_timer_default_v2')) {
+                try {
+                    localStorage.setItem('rummikub_timer_default_v2', '1');
+                    localStorage.setItem('rummikub_timer_enabled', '0');
+                } catch(e){}
+                timerEnabled = false;
+            } else {
+                const savedTimer = localStorage.getItem('rummikub_timer_enabled');
+                if (savedTimer !== null) {
+                    timerEnabled = (savedTimer === '1');
+                } else {
+                    timerEnabled = false;
+                }
             }
             const savedProfile = localStorage.getItem('rummikub_ai_profile');
             if (savedProfile) aiProfile = savedProfile;
