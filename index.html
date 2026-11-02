@@ -2545,7 +2545,7 @@
             <i class="fa-solid fa-cubes-stacked" style="color:var(--accent-gold);"></i>
             <span id="top-deck-count">76</span>
         </div>
-        <div class="nav-pill timer-nav-pill" id="timer-container" title="Minuteur (60s)">
+        <div class="nav-pill timer-nav-pill" id="timer-container" title="Minuteur (60s)" style="display:none;">
             <div class="timer-svg-wrap">
                 <svg class="timer-svg" width="32" height="32" viewBox="0 0 36 36">
                     <circle class="timer-ring-bg" cx="18" cy="18" r="16"></circle>
@@ -2764,7 +2764,7 @@
             <div style="display:flex; justify-content:space-between; align-items:center; min-height:44px;">
                 <label><span>Minuteur 60 s</span></label>
                 <label class="toggle-switch">
-                    <input type="checkbox" id="welcome-timer-chk" checked>
+                    <input type="checkbox" id="welcome-timer-chk">
                     <span class="toggle-slider"></span>
                 </label>
             </div>
@@ -3239,7 +3239,7 @@
         }
         return { colInProg, colRuns, colGroups };
     }
-    let timerEnabled = true;
+    let timerEnabled = false;
     let turnTimerInterval = null;
     let timerPaused = false;
     let gameGeneration = 0;
@@ -11153,6 +11153,8 @@
         const wTimer = document.getElementById('welcome-timer-chk');
         if (wTimer) wTimer.checked = timerEnabled;
         const wHints = document.getElementById('welcome-hints-chk');
+        const timerWidget = document.getElementById('timer-container');
+        if (timerWidget) timerWidget.style.display = timerEnabled ? 'flex' : 'none';
         if (wHints) wHints.checked = hintsEnabled;
         document.querySelectorAll('.setting-timer-chk').forEach(el => { el.checked = timerEnabled; });
         document.querySelectorAll('.setting-autofit-chk').forEach(el => { el.checked = autoFitEnabled; });
