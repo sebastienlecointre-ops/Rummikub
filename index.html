@@ -646,6 +646,17 @@
         .meld-row.valid-meld {
             border: 2px solid var(--success) !important;
         }
+        .meld-row.merge-group { outline: 2px dashed var(--accent-gold); outline-offset: 2px; }
+        #board-container.has-drop-suggest .meld-row:not(.drop-suggest) { opacity: 0.35; filter: grayscale(0.6); transition: opacity 0.15s; }
+        .meld-row.drop-suggest { outline: 3px solid #38bdf8; outline-offset: 2px; box-shadow: 0 0 16px rgba(56,189,248,0.7) !important; animation: dropSuggestPulse 0.9s ease-in-out infinite alternate; }
+        .meld-row.drop-suggest::after { content: '＋ ici'; position: absolute; top: -9px; left: 8px; background: #38bdf8; color: #000; font-size: 0.65rem; font-weight: 800; padding: 1px 6px; border-radius: 6px; pointer-events: none; }
+        .meld-row.drop-suggest.drag-target-active { background: var(--warning-bg) !important; }
+        @keyframes dropSuggestPulse { from { box-shadow: 0 0 6px rgba(56,189,248,0.4); } to { box-shadow: 0 0 20px rgba(56,189,248,0.9); } }
+        @media (prefers-reduced-motion: reduce) { .meld-row.drop-suggest { animation: none; } }
+        .merge-num { width: 18px; height: 18px; border-radius: 50%; background: var(--accent-gold); color: #000; display: inline-flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 800; font-family: var(--font-mono); margin-right: 2px; }
+        .merge-num-tag { margin-left: 6px; flex-shrink: 0; pointer-events: none; }
+        .btn-merge-meld .merge-preview { font-family: var(--font-mono); white-space: nowrap; }
+        @media (max-width: 640px) { .btn-merge-meld .merge-preview { max-width: 64px; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: bottom; } }
         .meld-row.drag-target-active {
             border-color: var(--accent-gold) !important;
             background: var(--warning-bg) !important;
@@ -1050,7 +1061,7 @@
         .tile.yellow { color: var(--tile-color-yellow); }
         .tile.black { color: var(--tile-color-black); }
         .tile.joker { color: #a855f7; }
-        .tile.tile-selected-tap {
+        .tile.tile-selected-tap, .tile.tap-selected {
             outline: 3px solid #38bdf8 !important;
             transform: translateY(-4px) scale(1.05);
             box-shadow: 0 8px 16px rgba(56, 189, 248, 0.6) !important;
@@ -1733,7 +1744,7 @@
         .mobile-drawer-overlay.active .mobile-drawer { right: 0; }
 
         /* MODALES ET OVERLAYS */
-        #game-over-overlay, #test-report-overlay, #welcome-settings-overlay, #starter-draw-overlay {
+        #game-over-overlay, #test-report-overlay, #welcome-settings-overlay, #starter-draw-overlay, #help-overlay {
             display: none;
             position: fixed;
             inset: 0;
@@ -2652,6 +2663,7 @@
 
         <!-- CHEVALET JOUEUR & ACTIONS -->
         <section class="player-bottom-panel">
+            <div id="multi-select-chip" style="display:none;align-self:center;align-items:center;background:var(--surface-2);border:1px solid var(--accent-gold);color:var(--accent-gold);border-radius:16px;padding:2px 10px;font-size:0.78rem;font-weight:700;"></div>
             <div class="rack-scroll-container">
                 <div class="rack-area" id="player-rack"></div>
             </div>
@@ -2676,6 +2688,7 @@
             <button type="button" class="btn-sidebar-collapse" id="btn-collapse-sidebar" title="Replier le panneau" onclick="toggleSidebarCollapse()">⇤</button>
             <div class="sidebar-legend-bubble" id="sidebar-legend-bubble">
                 <div style="font-weight:700; color:var(--accent-gold); margin-bottom:2px;">Légende des tuiles</div>
+                <div style="cursor:pointer;color:var(--accent-gold);text-decoration:underline;" onclick="openHelpModal()"><i class="fa-solid fa-circle-question"></i> Comment jouer ?</div>
                 <div style="display:flex; align-items:center; gap:6px;"><span class="legend-indicator" style="box-shadow: 0 0 0 2px #c026d3; background: #c026d3;"></span> Posée par l'IA</div>
                 <div style="display:flex; align-items:center; gap:6px;"><span class="legend-indicator" style="background: linear-gradient(145deg, #fdf4ff, #f0d5fa); border: 1px solid #c026d3;"></span> Déplacée par l'IA</div>
                 <div style="display:flex; align-items:center; gap:6px;"><span class="legend-indicator" style="border: 2px dashed var(--accent-gold); background: rgba(245, 158, 11, 0.15);"></span> Posée par vous</div>
@@ -2778,11 +2791,152 @@
             </div>
         </div>
         <div style="display:flex; flex-direction:column; gap:8px; margin-top:6px; width:100%;">
+            <a href="javascript:void(0)" id="welcome-help-link" onclick="openHelpModal()" style="text-align:center;font-size:0.85rem;color:var(--accent-gold);text-decoration:underline;padding:2px;border-radius:6px;">Comment jouer ?</a>
             <button class="btn-game secondary" id="welcome-continue-btn" style="width:100%; display:none;" onclick="continueSavedMatch()">Continuer la manche</button>
             <button class="btn-game primary" id="welcome-new-match-btn" style="width:100%;" onclick="applyWelcomeSettingsAndStart()">Jouer</button>
         </div>
     </div>
 </div>
+<div id="help-overlay" onclick="if(event.target===this)closeHelpModal()">
+    <style>
+        #help-overlay .modal-card { max-width: 520px; gap: 6px; font-size: 0.84rem; line-height: 1.4; }
+        #help-overlay details.help-section { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 0 10px; }
+        #help-overlay details.help-section > summary { list-style: none; cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--accent-gold); user-select: none; }
+        #help-overlay details.help-section > summary::-webkit-details-marker { display: none; }
+        #help-overlay details.help-section > summary::after { content: '\25BE'; margin-left: auto; transition: transform 0.2s ease; color: var(--text-muted); }
+        #help-overlay details.help-section[open] > summary::after { transform: rotate(180deg); }
+        #help-overlay .help-body { padding: 0 0 10px 0; display: flex; flex-direction: column; gap: 6px; color: var(--text); }
+        #help-overlay .help-body p { margin: 0; }
+        #help-overlay .help-body ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+        #help-overlay .help-tiles { display: flex; flex-wrap: wrap; gap: 4px; --tile-w: 28px; --tile-h: 37px; margin: 2px 0; }
+        #help-overlay .help-tiles .tile { cursor: default; pointer-events: none; }
+        #help-overlay .help-caption { font-size: 0.75rem; color: var(--text-muted); }
+        #help-overlay .help-body i.fa-solid { color: var(--accent-gold); }
+    </style>
+    <div class="modal-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <h2 class="modal-title" style="margin:0;"><i class="fa-solid fa-circle-question"></i> Comment jouer ?</h2>
+            <button type="button" class="btn-icon btn-modal-close" onclick="closeHelpModal()" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <details class="help-section" open>
+            <summary><i class="fa-solid fa-bullseye"></i> But du jeu</summary>
+            <div class="help-body">
+                <p>Soyez le <strong>premier à poser toutes les tuiles de votre chevalet</strong> sur la table, en formant des suites et des séries.</p>
+                <p>Quand un joueur vide son chevalet, la manche s'arrête : il marque les points qui restent dans la main de l'adversaire (le joker compte 30), et l'adversaire les perd.</p>
+                <p>Si la pioche est vide et que plus personne ne peut jouer, celui qui a le moins de points en main gagne la manche.</p>
+                <p>Un match se joue en 1, 2, 3 ou 5 manches : le vainqueur est celui qui gagne le plus de manches (en cas d'égalité, le meilleur score cumulé).</p>
+            </div>
+        </details>
+
+        <details class="help-section">
+            <summary><i class="fa-solid fa-puzzle-piece"></i> Les combinaisons</summary>
+            <div class="help-body">
+                <p><strong>Suite</strong> : au moins 3 tuiles de la même couleur qui se suivent, <strong>sans limite jusqu'à 13 tuiles</strong> (du 1 au 13). Le 1 est toujours en bas : 12-13-1 est interdit.</p>
+                <div class="help-tiles" id="help-run-ex">
+                    <div class="tile red"><span>10</span></div><div class="tile red"><span>11</span></div><div class="tile red"><span>12</span></div>
+                </div>
+                <div class="help-tiles" id="help-run-long-ex">
+                    <div class="tile blue"><span>3</span></div><div class="tile blue"><span>4</span></div><div class="tile blue"><span>5</span></div><div class="tile blue"><span>6</span></div><div class="tile blue"><span>7</span></div><div class="tile blue"><span>8</span></div>
+                </div>
+                <span class="help-caption">Une suite peut s'allonger autant que vous voulez, des deux côtés.</span>
+                <p><strong>Série</strong> : <strong>3 ou 4 tuiles</strong> de même valeur, toutes de couleurs différentes.</p>
+                <div class="help-tiles" id="help-grp-ex">
+                    <div class="tile red"><span>9</span></div><div class="tile blue"><span>9</span></div><div class="tile yellow"><span>9</span></div><div class="tile black"><span>9</span></div>
+                </div>
+                <span class="help-caption">Série de 4 : les quatre couleurs. Jamais deux fois la même couleur.</span>
+                <p><strong>Une combinaison = une seule ligne sur la table.</strong> Une ligne de 1 ou 2 tuiles est « incomplète » (contour orange en pointillés) : complétez-la avant de valider.</p>
+            </div>
+        </details>
+
+        <details class="help-section">
+            <summary><i class="fa-solid fa-rotate"></i> Votre tour</summary>
+            <div class="help-body">
+                <ul>
+                    <li>Posez au moins une tuile de votre chevalet puis touchez <i class="fa-solid fa-check"></i> <strong>Valider</strong>, ou touchez <i class="fa-solid fa-plus"></i> <strong>Piocher</strong> : vous prenez une tuile et votre tour se termine.</li>
+                    <li><strong>Première pose (ouverture)</strong> : une ou plusieurs combinaisons qui totalisent <strong>au moins 30 points</strong>, avec vos tuiles uniquement. Le badge du bouton Valider affiche votre total (par exemple 24/30). Avant l'ouverture, vous ne pouvez pas toucher aux combinaisons déjà sur la table.</li>
+                    <li><strong>Après l'ouverture</strong> : vous pouvez compléter, couper, déplacer et réorganiser toutes les combinaisons de la table, à condition qu'à la fin il ne reste que des combinaisons valides. Une tuile de la table ne revient jamais dans votre chevalet.</li>
+                    <li>Le petit rond <i class="fa-solid fa-check"></i> / <i class="fa-solid fa-xmark"></i> à côté de Valider indique en direct si votre coup est valide ; touchez-le pour lire la raison.</li>
+                    <li><i class="fa-solid fa-rotate-left"></i> <strong>Annuler</strong> remet la table et votre chevalet comme au début du tour.</li>
+                    <li><strong>Minuteur</strong> (si activé) : 60 secondes par tour. À 0 s, un coup valide est validé automatiquement ; un coup invalide est annulé et vous piochez 3 tuiles.</li>
+                </ul>
+            </div>
+        </details>
+
+        <details class="help-section">
+            <summary><i class="fa-solid fa-face-smile"></i> Le joker</summary>
+            <div class="help-body">
+                <ul>
+                    <li>Il remplace n'importe quelle tuile ; sa valeur s'affiche dans un petit badge sur la tuile.</li>
+                    <li>Dans une suite, déposez-le au début ou à la fin pour choisir sa place. Si plusieurs valeurs sont possibles, choisissez avec les boutons « Joker = ».</li>
+                    <li>Après votre ouverture, vous pouvez récupérer un joker de la table en le remplaçant par la vraie tuile, mais vous devez le rejouer dans le même tour.</li>
+                    <li>Un joker resté dans votre main en fin de manche vaut 30 points.</li>
+                </ul>
+            </div>
+        </details>
+
+        <details class="help-section">
+            <summary><i class="fa-solid fa-hand-pointer"></i> Poser les tuiles</summary>
+            <div class="help-body">
+                <ul>
+                    <li><strong>Glissez</strong> une tuile sur une combinaison, ou sur un espace vide de la table (cadre « Nouvelle combinaison ») pour en créer une nouvelle. Pendant le glissement, les lignes où elle peut aller s'éclairent en bleu avec « ＋ ici ».</li>
+                    <li><strong>Plusieurs tuiles d'un coup</strong> : touchez-les dans le chevalet (contour bleu et compteur « N tuiles sélectionnées »), puis touchez la table ou une combinaison.</li>
+                    <li><strong>Suite éparpillée sur plusieurs lignes ?</strong> Les lignes à réunir s'entourent de pointillés dorés avec un numéro (①, ②…). Touchez la pastille <strong>① ⇄ 10-11-12</strong> : elle montre le résultat et réunit les tuiles en une seule combinaison. Après votre ouverture, elle peut aussi compléter une combinaison déjà sur la table.</li>
+                    <li>Retirer une tuile au milieu d'une suite la <strong>coupe automatiquement en deux</strong>. Poser un doublon dans une suite (un 6 rouge sur 4-5-6-7-8 rouge) propose de la couper en 4-5-6 et 6-7-8.</li>
+                </ul>
+            </div>
+        </details>
+
+        <details class="help-section">
+            <summary><i class="fa-solid fa-eye"></i> Lire l'écran</summary>
+            <div class="help-body">
+                <ul>
+                    <li>En haut de l'écran : <i class="fa-solid fa-user"></i> = <strong>vos tuiles restantes</strong>, <i class="fa-solid fa-robot"></i> = <strong>les tuiles de l'IA</strong>, <i class="fa-solid fa-cubes-stacked"></i> = <strong>les tuiles restantes dans la pioche</strong>. Une pastille devient rouge quand il reste 3 tuiles ou moins.</li>
+                    <li>Le cercle avec des secondes est le minuteur (s'il est activé). Sur grand écran, <i class="fa-solid fa-trophy"></i> indique la manche en cours.</li>
+                    <li>La <strong>barre de messages</strong>, en haut de la table, indique à qui c'est le tour et le dernier événement. Touchez-la pour ouvrir l'historique complet (filtres Vous, IA, Alertes).</li>
+                    <li>Après le coup de l'IA, un panneau violet le résume. « Revoir » ou le bouton <i class="fa-solid fa-clock-rotate-left"></i> <strong>Dernier coup</strong> rejoue son animation. Les tuiles posées par l'IA portent un badge « IA ».</li>
+                    <li>La tuile que vous venez de piocher est entourée en cyan.</li>
+                </ul>
+            </div>
+        </details>
+
+        <details class="help-section">
+            <summary><i class="fa-solid fa-chart-pie"></i> Statistiques et réglages</summary>
+            <div class="help-body">
+                <ul>
+                    <li><strong>Sur ordinateur</strong> (écran large) : le panneau <strong>« Analyse »</strong>, à droite, affiche la carte <strong>Partie</strong> (tuiles de chacun, courbe de la partie, pioche, vos points en main), la carte <strong>« Tuiles déjà sorties »</strong> (pour chaque tuile : sur la table, dans votre main ou encore inconnue, plus les jokers), le score du <strong>Match</strong> et les <strong>Réglages</strong>. Le bouton ⇤ le replie, le bouton ? affiche la légende.</li>
+                    <li><strong>Sur téléphone et tablette</strong> : touchez <i class="fa-solid fa-bars"></i> en haut à droite pour ouvrir <strong>« Menu &amp; Infos »</strong> : vous y trouvez les mêmes informations et les mêmes réglages.</li>
+                    <li><strong>Dans Réglages</strong> : niveau de l'IA (Facile, Normal, Expert), minuteur, aides (bouton Indice), ajustement automatique du zoom, mode daltonien, affichage, zoom, historique, nouveau match et « Réafficher les astuces ».</li>
+                </ul>
+            </div>
+        </details>
+
+        <details class="help-section">
+            <summary><i class="fa-solid fa-table-cells-large"></i> Affichage de la table</summary>
+            <div class="help-body">
+                <ul>
+                    <li>Le bouton à côté du minuteur bascule entre <i class="fa-solid fa-table-cells-large"></i> <strong>Compact</strong> (les combinaisons à la suite) et <i class="fa-solid fa-table-columns"></i> <strong>Suites / Séries</strong> (deux bandes séparées, plus une bande « En cours » pour les combinaisons incomplètes).</li>
+                    <li><strong>Zoom</strong> : boutons − <i class="fa-solid fa-expand"></i> + en haut de la table (<i class="fa-solid fa-expand"></i> ajuste tout à l'écran) ; sur ordinateur, Ctrl + molette.</li>
+                </ul>
+            </div>
+        </details>
+
+        <details class="help-section">
+            <summary><i class="fa-solid fa-gamepad"></i> Les boutons du bas</summary>
+            <div class="help-body">
+                <ul>
+                    <li><i class="fa-solid fa-plus"></i> Piocher (devient <i class="fa-solid fa-forward"></i> Passer quand la pioche est vide)</li>
+                    <li><i class="fa-solid fa-check"></i> Valider (avant l'ouverture, le badge affiche vos points, par exemple 24/30)</li>
+                    <li><i class="fa-solid fa-rotate-left"></i> Annuler les modifications du tour</li>
+                    <li><i class="fa-solid fa-palette"></i> / <i class="fa-solid fa-arrow-down-1-9"></i> Trier le chevalet par couleur ou par chiffre</li>
+                    <li><i class="fa-solid fa-lightbulb"></i> Indice, puis <i class="fa-solid fa-play"></i> Montre-moi : démonstration pas à pas sur la table</li>
+                    <li>Sur écran tactile, un appui long sur un bouton affiche son nom.</li>
+                </ul>
+            </div>
+        </details>
+    </div>
+</div>
+
 
 <div id="starter-draw-overlay">
     <div class="modal-card" style="text-align:center;">
@@ -3051,7 +3205,7 @@
         return upper ? name.toUpperCase() : name;
     }
     
-    let pool = [], playerHand = [], aiHand = [], boardRows = [];
+    let pool = [], playerHand = [], aiHand = [], boardRows = [], mergePlanCache = { groups: [] };
     let backupPlayerHand = [], backupBoardRows = [];
     let gameState = 'PLAYER_TURN'; // 'PLAYER_TURN' | 'AI_TURN' | 'ANIMATING' | 'GAME_OVER'
     let playerOpened = false, aiOpened = false, sortMode = 'color', placedThisTurnIds = new Set();
@@ -3114,6 +3268,8 @@
         playerTurnStartedAt = Date.now();
         playerTurnPausedDurationTotal = 0;
         playerTurnPauseStartedAt = null;
+        showTipOnce('layout-button', "Le bouton à côté du minuteur change l'affichage du tapis.");
+        if (aiHand.length <= 5) showTipOnce('ai-few-tiles', `L'IA n'a plus que ${aiHand.length} tuiles (pastille 🤖 en haut).`);
     }
 
     function pausePlayerTurnTiming() {
@@ -3440,7 +3596,7 @@
         existingBubbles.forEach(b => b.remove());
 
         const el = document.createElement('div');
-        el.className = `notify-bubble kind-${item.kind}`;
+        el.className = `notify-bubble kind-${item.kind}${item.isTip ? ' tip-bubble' : ''}`;
         if (item.kind === 'alert') {
             el.setAttribute('role', 'alert');
         } else {
@@ -3454,7 +3610,7 @@
             ? '<i class="fa-solid fa-circle-exclamation bubble-icon"></i>'
             : item.kind === 'success'
             ? '<i class="fa-solid fa-circle-check bubble-icon"></i>'
-            : '<i class="fa-solid fa-circle-info bubble-icon"></i>';
+            : (item.isTip ? '<i class="fa-solid fa-lightbulb bubble-icon"></i>' : '<i class="fa-solid fa-circle-info bubble-icon"></i>');
 
         const spanText = document.createElement('span');
         spanText.className = 'bubble-text';
@@ -3462,6 +3618,7 @@
 
         el.innerHTML = iconHtml;
         el.appendChild(spanText);
+        if (item.onShown) { try { item.onShown(); } catch(e){} item.onShown = null; }
 
         const bubbleObj = {
             item,
@@ -3549,7 +3706,8 @@
         }
 
         if (channel === 'bubble' || channel === 'both') {
-            const item = { text, kind, priority, key, ttlMs, createdAt: Date.now() };
+            const isTip = !!(options.isTip || (options.key && String(options.key).startsWith('tip-')));
+            const item = { text, kind, priority, key, ttlMs, createdAt: Date.now(), onShown: options.onShown, isTip };
             const itemKey = getNotificationKey(item);
 
             if (currentBubble && getNotificationKey(currentBubble.item) === itemKey) {
@@ -3679,7 +3837,7 @@
         rafId: null, currentTargetEl: null, currentTargetClass: '',
         candidateTargetEl: null, candidateTargetClass: '', candidateTargetSince: 0
     };
-    let tapSelectedTile = null;
+    let tapSelectedTile = null, multiSelectedIds = [];
 
     function getAiLevelDescription(level) {
         if (level === 'facile') return "Ajouts simples, rate parfois un coup";
@@ -5253,6 +5411,7 @@
         updateMatchDisplay();
         applyHintsVisibility();
         syncSettingsControls();
+        updateMultiSelectChip();
     }
 
     function saveMatchSettings(isFinished = false, inProgress = false) {
@@ -5322,6 +5481,26 @@
         applyHintsVisibility();
         syncSettingsControls();
     }
+    function showTipOnce(id, text) {
+        if (!hintsEnabled) return;
+        try { const raw = localStorage.getItem('rummikub_tips_seen'), s = raw ? JSON.parse(raw) : []; if (Array.isArray(s) && s.includes(id)) return; } catch(e) { return; }
+        notify({ text, kind: 'info', channel: 'bubble', ttlMs: 7000, key: 'tip-' + id, priority: 1, isTip: true, onShown: () => {
+            try { const raw = localStorage.getItem('rummikub_tips_seen'), s = raw ? JSON.parse(raw) : [], arr = Array.isArray(s) ? s : []; if (!arr.includes(id)) { arr.push(id); localStorage.setItem('rummikub_tips_seen', JSON.stringify(arr)); } } catch(e){}
+        }});
+    }
+    function resetTipsSeen() {
+        try { localStorage.removeItem('rummikub_tips_seen'); } catch(e){}
+        notify({ text: "Astuces réinitialisées", kind: 'info', channel: 'bubble', ttlMs: 2000, key: 'reset-tips' });
+    }
+    function openHelpModal() {
+        pauseTurnTimer();
+        try { localStorage.setItem('rummikub_help_seen', '1'); } catch(e){}
+        const runEl = document.getElementById('help-run-ex'); if (runEl && !runEl.children.length) [10,11,12].forEach(v => runEl.appendChild(createTileElement({id:-10-v,value:v,color:'red',isJoker:false},'board')));
+        const grpEl = document.getElementById('help-grp-ex'); if (grpEl && !grpEl.children.length) ['red','blue','yellow'].forEach((c,i) => grpEl.appendChild(createTileElement({id:-20-i,value:9,color:c,isJoker:false},'board')));
+        const hl = document.getElementById('welcome-help-link'); if (hl) hl.style.outline = 'none';
+        const o = document.getElementById('help-overlay'); if (o) o.style.display = 'flex';
+    }
+    function closeHelpModal() { const o = document.getElementById('help-overlay'); if (o) o.style.display = 'none'; resumeTurnTimer(); }
     function setAutoFitSetting(enabled) {
         autoFitEnabled = !!enabled;
         try {
@@ -8410,6 +8589,7 @@
         consecutivePassCount = drawResult.consecutivePassCount;
         const drawn = drawResult.drawnTile;
         if (drawn) {
+            showTipOnce('first-draw', "Pas de coup ? Piochez : votre tour se termine et la tuile est entourée en cyan.");
             const tileLabel = drawn.isJoker ? "Joker" : `${drawn.value} ${colorLabel(drawn.color)}`;
             notify({ text: `Vous piochez le ${tileLabel}`, kind: 'info', channel: 'both', logTag: '[VOTRE TOUR]', key: 'player-draw' });
         } else {
@@ -8464,7 +8644,14 @@
         if (!validation.valid) {
             lastValidationErrors = validation.errors;
             renderInvalidMeldErrors(validation.errors);
-            notify({ text: `Coup non valide : ${validation.errors[0].message}`, kind: 'alert', channel: 'both', key: 'validate-error' });
+            const g0 = (mergePlanCache.groups && mergePlanCache.groups[0]) || computeMergePlan(boardRows, backupBoardRows, playerOpened).groups[0];
+            let msg = `Coup non valide : ${validation.errors[0].message}`;
+            if (g0) {
+                const vStr = g0.previewText.replace(/-/g, ', ').replace(/, ([^, ]+)( [^ ]+)?$/, ' et $1$2'), hasJ = g0.tiles.some(t => t.isJoker);
+                msg = `${g0.previewText} : ${vStr}${hasJ ? ' avec Joker' : ''} sont sur plusieurs lignes : réunissez-les dans la même ligne (touchez la pastille ⇄)`;
+            }
+            if (validation.errors.some(e => e.code === 'OPENING_SCORE_TOO_LOW')) showTipOnce('opening-30', "Première pose : au moins 30 points, avec vos tuiles uniquement.");
+            notify({ text: msg, kind: 'alert', channel: 'both', key: 'validate-error' });
             // Pas de pénalité immédiate : on laisse corriger ou annuler !
             return;
         }
@@ -9335,20 +9522,36 @@
     }
 
     // --- MODE TACTILE SÉLECTION & TOUCHER LA DESTINATION ---
+    function updateMultiSelectChip() {
+        const c = document.getElementById('multi-select-chip');
+        if (c) { c.style.display = multiSelectedIds.length >= 2 ? 'inline-flex' : 'none'; c.innerHTML = multiSelectedIds.length >= 2 ? `${multiSelectedIds.length} tuiles sélectionnées · <span onclick="clearTapSelection()" style="cursor:pointer;padding:0 6px;" title="Désélectionner">✕</span>` : ''; }
+    }
     function clearTapSelection() {
-        if (hintLevel === 1) {
-            resetHintButton();
-        }
+        if (hintLevel === 1) resetHintButton();
+        multiSelectedIds = [];
+        updateMultiSelectChip();
         if (tapSelectedTile) {
             document.querySelectorAll('.tile.tile-selected-tap').forEach(el => el.classList.remove('tile-selected-tap'));
             tapSelectedTile = null;
         }
+        document.querySelectorAll('.tile.tap-selected').forEach(el => el.classList.remove('tap-selected'));
     }
 
     function handleTileTap(tileId, zone, rowId, sourceIndex, tileObj) {
         if (gameState !== 'PLAYER_TURN' || isDemoActive) return;
-        if (contextPanelMode !== 'demo') {
-            hideContextPanel('tap');
+        if (contextPanelMode !== 'demo') hideContextPanel('tap');
+        if (zone === 'rack' && (!tapSelectedTile || tapSelectedTile.sourceZone !== 'board')) {
+            const idx = multiSelectedIds.indexOf(tileId);
+            if (idx >= 0) multiSelectedIds.splice(idx, 1); else multiSelectedIds.push(tileId); updateMultiSelectChip();
+            const first = playerHand.find(t => t.id === multiSelectedIds[0]);
+            tapSelectedTile = first ? { id: first.id, sourceZone: 'rack', sourceRowId: -1, sourceIndex: playerHand.indexOf(first), tile: first } : null;
+            updateUI();
+            return;
+        }
+        if (zone === 'board' && multiSelectedIds.length >= 1) {
+            const tiles = playerHand.filter(t => multiSelectedIds.includes(t.id));
+            for (const t of tiles) { const { tile: ext, sourceIndex: si } = findAndExtractTile(t.id, 'rack', -1); if (ext) executeMoveToRow(ext, rowId, -1, 'rack', -1, si); }
+            clearTapSelection(); updateUI(); return;
         }
         if (tapSelectedTile === null) {
             if (zone === 'board' && !playerOpened) {
@@ -9446,7 +9649,8 @@
         if (!pointerState.active || pointerState.isDragging) return;
         pointerState.isDragging = true;
         document.body.classList.add('is-dragging');
-        clearTapSelection();
+        pointerState.groupIds = (pointerState.sourceZone === 'rack' && pointerState.pointerType !== 'touch' && multiSelectedIds.includes(pointerState.tileId) && multiSelectedIds.length >= 2) ? [...multiSelectedIds] : null;
+        if (!pointerState.groupIds) clearTapSelection();
         if (boardLayoutMode === 'columns' && !cachedColumnsClassification) {
             cachedColumnsClassification = classifyBoardRowsForColumns(boardRows);
         }
@@ -9456,6 +9660,19 @@
             if (pointerState.pointerId !== null && typeof pointerState.targetTileEl.setPointerCapture === 'function') {
                 try { pointerState.targetTileEl.setPointerCapture(pointerState.pointerId); } catch(err){}
             }
+        }
+        if (pointerState.sourceZone === 'rack' && !pointerState.groupIds && pointerState.tileObj) {
+            const bk = new Set(backupBoardRows.map(r => r.id)), t = pointerState.tileObj, cOk = ts => isValidMeldFast(ts, 'run') || isValidMeldFast(ts, 'group');
+            const pOk = ts => {
+                const n = ts.filter(x => !x.isJoker), j = ts.length - n.length, vs = n.map(x => x.value), mn = Math.min(...vs), mx = Math.max(...vs);
+                return n.length && j <= 2 && ((n.every(x => x.color === n[0].color) && new Set(vs).size === n.length && (mx - mn + 1 - n.length) <= j && Math.max(ts.length, mx - mn + 1) <= 13) || (ts.length <= 4 && n.every(x => x.value === vs[0]) && new Set(n.map(x => x.color)).size === n.length));
+            };
+            let hasSuggest = false;
+            boardRows.forEach(r => {
+                const isNew = !bk.has(r.id);
+                if ((playerOpened || isNew) && (cOk([...r.tiles, t]) || (isNew && pOk([...r.tiles, t])))) { document.querySelector(`.meld-row[data-row-id="${r.id}"]`)?.classList.add('drop-suggest'); hasSuggest = true; }
+            });
+            if (hasSuggest) document.getElementById('board-container')?.classList.add('has-drop-suggest');
         }
         if (!pointerState.rafId) {
             pointerState.rafId = requestAnimationFrame(runDragLoop);
@@ -9692,7 +9909,8 @@
         pointerState.candidateTargetEl = null;
         pointerState.candidateTargetClass = '';
         pointerState.candidateTargetSince = 0;
-        document.querySelectorAll('.drag-target-active, .drag-over, .placeholder-active').forEach(el => el.classList.remove('drag-target-active', 'drag-over', 'placeholder-active'));
+        document.querySelectorAll('.drag-target-active, .drag-over, .placeholder-active, .drop-suggest').forEach(el => el.classList.remove('drag-target-active', 'drag-over', 'placeholder-active', 'drop-suggest'));
+        document.getElementById('board-container')?.classList.remove('has-drop-suggest');
         document.body.classList.remove('is-dragging');
         const { tileId, sourceZone, sourceRowId, sourceIndex, tileObj } = pointerState;
         if (pointerState.targetTileEl && pointerState.pointerId !== null && typeof pointerState.targetTileEl.releasePointerCapture === 'function') {
@@ -9712,6 +9930,19 @@
 
         const hitEl = document.elementFromPoint(e.clientX, e.clientY);
         if (!hitEl && !activeTargetEl) { updateUI(); return; }
+        if (pointerState.groupIds) {
+            const gIds = pointerState.groupIds; pointerState.groupIds = null;
+            const hit = activeTargetEl || hitEl, mRow = hit && !hit.closest('#player-rack') && hit.closest('.meld-row');
+            const isNew = hit && !hit.closest('#player-rack') && !mRow && (hit.closest('.new-meld-placeholder') || hit.closest('.board-col-container') || (hit.closest('#board-container') && !hit.closest('#board-top-toolbar')));
+            if (isNew) {
+                const tiles = playerHand.filter(t => gIds.includes(t.id)), { tile: t1, sourceIndex: s1 } = findAndExtractTile(tiles[0].id, 'rack', -1);
+                if (t1) { executeMoveToNewRow(t1, 'rack', -1, s1); const nId = boardRows[boardRows.length - 1].id; for (let i = 1; i < tiles.length; i++) { const { tile: ti, sourceIndex: si } = findAndExtractTile(tiles[i].id, 'rack', -1); if (ti) executeMoveToRow(ti, nId, -1, 'rack', -1, si); } }
+            } else if (mRow) {
+                const rowId = mRow.getAttribute('data-row-id'), tiles = playerHand.filter(t => gIds.includes(t.id));
+                for (const t of tiles) { const { tile: ext, sourceIndex: si } = findAndExtractTile(t.id, 'rack', -1); if (ext) executeMoveToRow(ext, rowId, -1, 'rack', -1, si); }
+            }
+            clearTapSelection(); updateUI(); return;
+        }
 
         const { tile: extracted, sourceIndex: extractedIdx, splitContext } = findAndExtractTile(tileId, sourceZone, sourceRowId);
         if (!extracted) { updateUI(); return; }
@@ -9786,6 +10017,7 @@
         const ghost = document.createElement('div');
         ghost.className = `tile tile-ghost ${tile.isJoker ? 'joker' : tile.color}`;
         ghost.textContent = tile.isJoker ? '☺' : tile.value;
+        if (pointerState.groupIds) { const b = document.createElement('span'); b.className = 'ghost-group-badge'; b.style.cssText = 'position:absolute;top:-6px;right:-6px;background:var(--surface);color:var(--accent-gold);border:1px solid var(--accent-gold);border-radius:8px;padding:1px 4px;font-size:0.65rem;font-weight:800;'; b.textContent = `×${pointerState.groupIds.length}`; ghost.appendChild(b); }
         ghost.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%) scale(1.1)`;
         document.body.appendChild(ghost);
         pointerState.ghostEl = ghost;
@@ -9810,7 +10042,8 @@
         pointerState.candidateTargetEl = null;
         pointerState.candidateTargetClass = '';
         pointerState.candidateTargetSince = 0;
-        document.querySelectorAll('.drag-target-active, .drag-over, .placeholder-active').forEach(el => el.classList.remove('drag-target-active', 'drag-over', 'placeholder-active'));
+        document.querySelectorAll('.drag-target-active, .drag-over, .placeholder-active, .drop-suggest').forEach(el => el.classList.remove('drag-target-active', 'drag-over', 'placeholder-active', 'drop-suggest'));
+        document.getElementById('board-container')?.classList.remove('has-drop-suggest');
         document.body.classList.remove('is-dragging');
         if (pointerState.targetTileEl && pointerState.pointerId !== null && typeof pointerState.targetTileEl.releasePointerCapture === 'function') {
             try { pointerState.targetTileEl.releasePointerCapture(pointerState.pointerId); } catch(err){}
@@ -9950,9 +10183,18 @@
     }
 
     function handleBoardContainerClick(e) {
-        if (isDemoActive || gameState !== 'PLAYER_TURN') return;
-        if (!tapSelectedTile) return;
+        if (isDemoActive || gameState !== 'PLAYER_TURN' || !tapSelectedTile) return;
         if (e.target.closest('.tile') || e.target.closest('.meld-row') || e.target.closest('#board-top-toolbar')) return;
+        if (multiSelectedIds.length >= 1) {
+            const tiles = playerHand.filter(t => multiSelectedIds.includes(t.id));
+            const { tile: t1, sourceIndex: s1 } = findAndExtractTile(tiles[0].id, 'rack', -1);
+            if (t1) {
+                executeMoveToNewRow(t1, 'rack', -1, s1);
+                const nId = boardRows[boardRows.length - 1].id;
+                for (let i = 1; i < tiles.length; i++) { const { tile: ti, sourceIndex: si } = findAndExtractTile(tiles[i].id, 'rack', -1); if (ti) executeMoveToRow(ti, nId, -1, 'rack', -1, si); }
+            }
+            clearTapSelection(); updateUI(); return;
+        }
         const { tile: t, sourceIndex, splitContext } = findAndExtractTile(tapSelectedTile.id, tapSelectedTile.sourceZone, tapSelectedTile.sourceRowId);
         if (t) {
             executeMoveToNewRow(t, tapSelectedTile.sourceZone, tapSelectedTile.sourceRowId, sourceIndex, splitContext);
@@ -9970,8 +10212,7 @@
 
             btn.addEventListener('pointerdown', (e) => {
                 if (e.pointerType !== 'touch' && e.pointerType !== 'pen') return;
-                const startX = e.clientX;
-                const startY = e.clientY;
+                const startX = e.clientX, startY = e.clientY, pId = e.pointerId;
                 suppressActionBtnClick = false;
                 if (actionBtnLongPressTimer) clearTimeout(actionBtnLongPressTimer);
 
@@ -9986,12 +10227,14 @@
                 }, 500);
 
                 const onMove = (moveEv) => {
+                    if (moveEv.pointerId !== pId) return;
                     if (Math.hypot(moveEv.clientX - startX, moveEv.clientY - startY) > 10) {
                         clearTimeout(actionBtnLongPressTimer);
                         actionBtnLongPressTimer = null;
                     }
                 };
                 const onEnd = () => {
+                    if (arguments[0] && arguments[0].pointerId !== pId) return;
                     if (actionBtnLongPressTimer) {
                         clearTimeout(actionBtnLongPressTimer);
                         actionBtnLongPressTimer = null;
@@ -10064,6 +10307,7 @@
             return;
         }
         if (e.key === 'Escape') {
+            const h = document.getElementById('help-overlay'); if (h && h.style.display !== 'none') { e.preventDefault(); closeHelpModal(); return; }
             closeSidebarLegend();
             const panel = document.getElementById('log-panel');
             if (panel && panel.style.display !== 'none') {
@@ -10423,6 +10667,115 @@
         return sep;
     }
 
+    function computeMergePlan(rows, backupRows, opened) {
+        const COLOR_FR = { red: 'rouge', blue: 'bleu', yellow: 'jaune', black: 'noir' };
+        const backupIds = new Set((backupRows || []).map(r => r.id));
+        const isComplete = ts => ts.length >= 3 && (isValidMeldFast(ts, 'run') || isValidMeldFast(ts, 'group'));
+        const isPartial = ts => {
+            const jokers = ts.filter(t => t.isJoker).length, norm = ts.filter(t => !t.isJoker);
+            if (!norm.length || jokers > 2 || ts.length > 13) return false;
+            const values = norm.map(t => t.value);
+            if (norm.every(t => t.color === norm[0].color) && new Set(values).size === values.length) {
+                const min = Math.min(...values), max = Math.max(...values);
+                if ((max - min + 1) - norm.length <= jokers && Math.max(ts.length, max - min + 1) <= 13) return true;
+            }
+            return norm.every(t => t.value === norm[0].value) && new Set(norm.map(t => t.color)).size === norm.length && ts.length <= 4;
+        };
+        const indexOf = new Map(rows.map((r, i) => [r.id, i]));
+        const isOpen = r => !isComplete(r.tiles);
+        let newRows = rows.filter(r => !backupIds.has(r.id) && r.tiles.length > 0);
+        if (!newRows.some(isOpen)) return { groups: [] };
+        newRows = newRows.filter(isOpen).concat(newRows.filter(r => !isOpen(r))).slice(0, 12);
+        const tableRows = opened ? rows.filter(r => backupIds.has(r.id) && isComplete(r.tiles)) : [];
+
+        // 1. Tous les regroupements possibles
+        const cands = [];
+        const addCand = (subset, tr) => {
+            const openRows = subset.filter(isOpen);
+            if (!openRows.length || subset.length + (tr ? 1 : 0) < 2) return;
+            const tiles = subset.flatMap(r => r.tiles).concat(tr ? tr.tiles : []);
+            const complete = isComplete(tiles);
+            if (!complete && (tr || !isPartial(tiles))) return;
+            const allRows = (tr ? [tr] : []).concat(subset).sort((a, b) => indexOf.get(a.id) - indexOf.get(b.id));
+            cands.push({
+                rows: allRows, tr, complete, tiles,
+                resolved: complete ? openRows.reduce((s, r) => s + r.tiles.length, 0) : 0,
+                partialMerge: complete ? 0 : subset.length - 1,
+                minIndex: indexOf.get(allRows[0].id),
+                ids: allRows.map(r => r.id)
+            });
+        };
+        const n = newRows.length;
+        for (let mask = 1; mask < (1 << n); mask++) {
+            const subset = newRows.filter((_, i) => mask & (1 << i));
+            addCand(subset, null);
+            if (subset.length <= 2) for (const tr of tableRows) addCand(subset, tr);
+        }
+
+        // 2. Meilleur ensemble de regroupements : tuiles incomplètes résolues, puis nouvelles lignes plutôt que la table
+        const val = c => c.resolved * 1000 - (c.tr ? 10 : 0) + c.partialMerge;
+        cands.sort((a, b) => (val(b) - val(a)) || (a.minIndex - b.minIndex));
+        const list = cands.slice(0, 150);
+        let best = [], bestScore = 0, nodes = 0;
+        const used = new Set(), chosen = [];
+        const dfs = (i, score) => {
+            if (++nodes > 20000) return;
+            if (score > bestScore) { bestScore = score; best = chosen.slice(); }
+            for (let j = i; j < list.length; j++) {
+                const c = list[j];
+                if (c.ids.some(id => used.has(id))) continue;
+                c.ids.forEach(id => used.add(id)); chosen.push(c);
+                dfs(j + 1, score + val(c));
+                chosen.pop(); c.ids.forEach(id => used.delete(id));
+            }
+        };
+        dfs(0, 0);
+
+        // 3. Textes et lignes de référence
+        const runValues = tiles => {
+            const norm = tiles.filter(t => !t.isJoker).map(t => t.value).sort((a, b) => a - b);
+            let jokers = tiles.length - norm.length;
+            const vals = norm.slice();
+            for (let v = norm[0]; v <= norm[norm.length - 1]; v++) if (!vals.includes(v) && jokers > 0) { vals.push(v); jokers--; }
+            let hi = norm[norm.length - 1], lo = norm[0];
+            while (jokers > 0 && hi < 13) { vals.push(++hi); jokers--; }
+            while (jokers > 0 && lo > 1) { vals.push(--lo); jokers--; }
+            return vals.sort((a, b) => a - b);
+        };
+        const groups = best.sort((a, b) => a.minIndex - b.minIndex).map(c => {
+            const norm = c.tiles.filter(t => !t.isJoker), jokers = c.tiles.length - norm.length;
+            const isRun = c.complete ? isValidMeldFast(c.tiles, 'run')
+                : (norm.length === 1 || (norm.every(t => t.color === norm[0].color) && new Set(norm.map(t => t.value)).size === norm.length));
+            let shortText, previewText;
+            if (isRun) {
+                shortText = runValues(c.tiles).join('-');
+                previewText = shortText + ' ' + (COLOR_FR[norm[0].color] || norm[0].color);
+            } else {
+                shortText = `${norm[0].value} ×${c.tiles.length}`;
+                previewText = norm.map(t => `${t.value} ${COLOR_FR[t.color] || t.color}`).concat(Array(jokers).fill('Joker')).join(', ');
+            }
+            const targetRow = c.tr || c.rows[0];
+            const anchorRow = c.rows.find(r => !backupIds.has(r.id) && isOpen(r)) || targetRow;
+            return { rows: c.rows, targetRow, anchorRow, complete: c.complete, previewText, shortText, tiles: c.tiles };
+        });
+        return { groups };
+    }
+    function applyMergeGroup(group, silent = false) {
+        const target = boardRows.find(r => r.id === group.targetRow.id);
+        if (!target) return;
+        target.jokerHints = target.jokerHints || {};
+        for (const r of group.rows) {
+            const src = (r.id !== target.id) && boardRows.find(row => row.id === r.id);
+            if (src) { target.tiles.push(...src.tiles); Object.assign(target.jokerHints, src.jokerHints || {}); src.tiles = []; }
+        }
+        normalizeRow(target);
+        boardRows = boardRows.filter(r => r.tiles.length > 0);
+        clearTapSelection(); updateUI();
+        if (!silent) notify({ text: 'Regroupé : ' + group.previewText, kind: 'success', channel: 'bubble', ttlMs: 2000, key: 'merge' });
+    }
+    function findMergeableRowGroups() {
+        return computeMergePlan(boardRows, backupBoardRows, playerOpened).groups.map(g => g.rows);
+    }
     function renderMeldRowContent(rowEl, row, tileElMap = null, allGameTileIds = null) {
         const prevRowScrollLeft = rowEl.scrollLeft;
         const detected = detectMeldType(row.tiles);
@@ -10563,6 +10916,27 @@
             const oldSel = rowEl.querySelector('.joker-val-selector');
             if (oldSel) oldSel.remove();
         }
+        const grpIdx = (!isDemoActive && mergePlanCache.groups) ? mergePlanCache.groups.findIndex(g => g.rows.some(r => r.id === row.id)) : -1;
+        if (grpIdx !== -1) {
+            const k = grpIdx + 1, grp = mergePlanCache.groups[grpIdx];
+            rowEl.classList.add('merge-group'); rowEl.setAttribute('data-merge-group', k);
+            if ((grp.anchorRow || grp.targetRow).id === row.id) {
+                let b = rowEl.querySelector('.btn-merge-meld') || document.createElement('button');
+                b.type = 'button'; b.className = 'btn-merge-meld';
+                b.style.cssText = 'min-height:44px;min-width:44px;padding:0 8px;font-size:0.75rem;font-weight:700;border-radius:8px;border:1px solid var(--accent-gold);background:var(--surface-2);color:var(--accent-gold);cursor:pointer;display:inline-flex;align-items:center;gap:4px;margin-left:6px;flex-shrink:0;';
+                b.innerHTML = '<span class="merge-num">' + k + '</span> ⇄ <span class="merge-preview">' + grp.shortText + '</span>';
+                b.title = 'Regrouper → ' + grp.previewText;
+                b.setAttribute('aria-label', 'Fusionner : ' + grp.previewText);
+                b.onclick = (e) => { if (e && e.stopPropagation) e.stopPropagation(); applyMergeGroup(grp); };
+                desiredChildren.push(b);
+            } else {
+                let numTag = rowEl.querySelector('.merge-num-tag') || document.createElement('span');
+                numTag.className = 'merge-num merge-num-tag';
+                numTag.textContent = k;
+                desiredChildren.push(numTag);
+            }
+        } else { rowEl.classList.remove('merge-group'); rowEl.removeAttribute('data-merge-group'); }
+
         reconcileChildren(rowEl, desiredChildren);
         rowEl.scrollLeft = prevRowScrollLeft;
     }
@@ -10577,6 +10951,11 @@
         rowEl.addEventListener('click', (e) => {
             if (isDemoActive) return;
             if (tapSelectedTile && !e.target.closest('.meld-separator') && !e.target.closest('.tile') && !e.target.closest('.joker-val-selector')) {
+                if (multiSelectedIds.length >= 1) {
+                    const tiles = playerHand.filter(t => multiSelectedIds.includes(t.id));
+                    for (const t of tiles) { const { tile: ext, sourceIndex: si } = findAndExtractTile(t.id, 'rack', -1); if (ext) executeMoveToRow(ext, row.id, -1, 'rack', -1, si); }
+                    clearTapSelection(); updateUI(); return;
+                }
                 const rect = rowEl.getBoundingClientRect();
                 const isLeftHalf = (e.clientX < (rect.left + rect.width / 2));
                 const { tile: t, sourceIndex, splitContext } = findAndExtractTile(tapSelectedTile.id, tapSelectedTile.sourceZone, tapSelectedTile.sourceRowId);
@@ -10609,6 +10988,8 @@
     function updateUI(lightweight = false) {
         placedThisTurnIds = new Set(getPlacedTilesFromRack().map(t => t.id));
         updateLiveValidation();
+        mergePlanCache = (gameState === 'PLAYER_TURN' && !isDemoActive) ? computeMergePlan(boardRows, backupBoardRows, playerOpened) : { groups: [] };
+        if (mergePlanCache.groups.length) showTipOnce('split-rows', "Astuce : une suite doit être dans une seule ligne. Touchez la pastille ⇄ pour réunir les tuiles, ou sélectionnez plusieurs tuiles avant de les poser.");
 
         // 1. Sauvegarde des positions de défilement pour éviter les sauts
         const boardContainer = document.getElementById('board-container');
@@ -10779,7 +11160,9 @@
         updateButtonStates();
         updateTopNavbar();
         syncSettingsControls();
+        updateMultiSelectChip();
     }
+
 
     function renderDashboardSparklineSvg(history) {
         const W = 280, H = 32, padL = 6, padR = 6, padT = 4, padB = 4;
@@ -10894,6 +11277,8 @@
                                     <span class="toggle-slider" style="width:36px; height:20px;"></span>
                                 </label>
                             </div>
+                            <button type="button" class="btn-game secondary btn-help-sheet" style="min-height:36px;font-size:0.75rem;" onclick="openHelpModal()"><i class="fa-solid fa-circle-question"></i> Comment jouer ?</button>
+                            <button type="button" class="btn-game secondary btn-reset-tips" style="min-height:44px; font-size:0.75rem; margin-top:4px;" onclick="resetTipsSeen()">Réafficher les astuces</button>
 
                             <div style="display:flex; justify-content:space-between; align-items:center; min-height:36px; cursor:pointer;" title="Affiche le bouton Indice">
                                 <label title="Affiche le bouton Indice"><span>Aides</span></label>
@@ -11190,6 +11575,7 @@
         if (slider) slider.value = String(Math.round(currentBoardZoom * 100));
         const zoomVal = document.getElementById('board-zoom-val');
         if (zoomVal) zoomVal.textContent = zoomPct;
+        const hl = document.getElementById('welcome-help-link'); if (hl) hl.style.outline = localStorage.getItem('rummikub_help_seen') ? 'none' : '2px solid var(--accent-gold)';
 
         const aiDesc = getAiLevelDescription(aiProfile);
         const wDesc = document.getElementById('welcome-ai-desc');
@@ -11369,8 +11755,9 @@
             badge.remove();
         }
 
-        el.classList.remove('highlight-new', 'placed-this-turn', 'ai-placed', 'ai-moved', 'tile-selected-tap', 'tile-hint-candidate', 'rack-group-start');
+        el.classList.remove('highlight-new', 'placed-this-turn', 'ai-placed', 'ai-moved', 'tile-selected-tap', 'tile-hint-candidate', 'rack-group-start', 'tap-selected');
         if (zone === 'rack') {
+            if (multiSelectedIds.includes(tile.id)) el.classList.add('tap-selected');
             if (newlyDrawnTileIds.has(tile.id)) {
                 el.classList.add('highlight-new');
             }
@@ -11386,7 +11773,7 @@
                 el.classList.add('ai-moved');
             }
         }
-        if (tapSelectedTile && tapSelectedTile.id === tile.id) {
+        if (tapSelectedTile && tapSelectedTile.id === tile.id && zone === 'board') {
             el.classList.add('tile-selected-tap');
         }
         return el;
@@ -13310,6 +13697,43 @@
             }
         });
 
+        await runTestCase("computeMergePlan : règles de sélection, cibles et calculs", () => {
+            const savedHand = playerHand, savedBoard = boardRows, savedBHand = backupPlayerHand, savedBBoard = backupBoardRows, savedOp = playerOpened, savedState = gameState;
+            try {
+                tileAssertSilenced = true;
+                // 1. new [10r, 11r, 12r] + new [13r] -> 1 complete group
+                const r1 = { id: 97001, type: 'run', tiles: [10, 11, 12].map(v => ({ id: 97100 + v, value: v, color: 'red', isJoker: false })) };
+                const r2 = { id: 97002, type: 'run', tiles: [{ id: 97113, value: 13, color: 'red', isJoker: false }] };
+                const p1 = computeMergePlan([r1, r2], [], true);
+                assert(p1.groups.length === 1 && p1.groups[0].complete === true, "1 complete group attendu");
+                // 2. new [8r, 8b, 8y] + new [8k] -> 1 complete group
+                const g1 = { id: 97003, type: 'group', tiles: ['red', 'blue', 'yellow'].map((c, i) => ({ id: 97200 + i, value: 8, color: c, isJoker: false })) };
+                const g2 = { id: 97004, type: 'group', tiles: [{ id: 97210, value: 8, color: 'black', isJoker: false }] };
+                const p2 = computeMergePlan([g1, g2], [], true);
+                assert(p2.groups.length === 1 && p2.groups[0].complete === true, "1 complete group pour série attendu");
+                // 3. table 4-5-6 red + new [7r] : opened true -> targetRow table ; opened false -> 0 group
+                const tr = { id: 97005, type: 'run', tiles: [4, 5, 6].map(v => ({ id: 97300 + v, value: v, color: 'red', isJoker: false })) };
+                const nr7 = { id: 97006, type: 'run', tiles: [{ id: 97307, value: 7, color: 'red', isJoker: false }] };
+                const p3Open = computeMergePlan([tr, nr7], [tr], true);
+                assert(p3Open.groups.length === 1 && p3Open.groups[0].targetRow.id === tr.id, "targetRow doit être la ligne de table quand opened=true");
+                const p3Closed = computeMergePlan([tr, nr7], [tr], false);
+                assert(p3Closed.groups.length === 0, "0 groupe quand opened=false");
+                // 4. new [7r], [7b], [8r], [9r] -> group 7r-8r-9r (complete), 7b sans groupe
+                const r7r = { id: 97007, type: 'run', tiles: [{ id: 97407, value: 7, color: 'red', isJoker: false }] };
+                const r7b = { id: 97008, type: 'run', tiles: [{ id: 97408, value: 7, color: 'blue', isJoker: false }] };
+                const r8r = { id: 97009, type: 'run', tiles: [{ id: 97409, value: 8, color: 'red', isJoker: false }] };
+                const r9r = { id: 97010, type: 'run', tiles: [{ id: 97410, value: 9, color: 'red', isJoker: false }] };
+                const p4 = computeMergePlan([r7r, r7b, r8r, r9r], [], true);
+                assert(p4.groups.length === 1 && p4.groups[0].rows.length === 3 && !p4.groups[0].rows.some(r => r.id === r7b.id), "7r-8r-9r choisi, 7b exclu");
+                // 5. new valid rows [1,2,3 blue] and [4,5,6 blue] -> 0 group (both closed/valid)
+                const rB1 = { id: 97011, type: 'run', tiles: [1, 2, 3].map(v => ({ id: 97500 + v, value: v, color: 'blue', isJoker: false })) };
+                const rB2 = { id: 97012, type: 'run', tiles: [4, 5, 6].map(v => ({ id: 97510 + v, value: v, color: 'blue', isJoker: false })) };
+                const p5 = computeMergePlan([rB1, rB2], [], true);
+                assert(p5.groups.length === 0, "0 groupe si les deux lignes sont complètes/valides");
+                return "Toutes les propriétés de computeMergePlan validées";
+            } finally { playerHand = savedHand; boardRows = savedBoard; backupPlayerHand = savedBHand; backupBoardRows = savedBBoard; playerOpened = savedOp; gameState = savedState; tileAssertSilenced = false; }
+        });
+
         await runTestCase("Glisser annulé → aucune scission et conservation stricte des tuiles", () => {
             const savedBoard = cloneRows(boardRows);
             const savedHand = playerHand.map(cloneTile);
@@ -14393,11 +14817,11 @@
             assert(drawBtn !== null, "#draw-btn doit exister");
 
             let actionTriggered = false;
-            const originalHandler = drawBtn.onclick;
+            const originalHandler = drawBtn.onclick, origDisabled = drawBtn.disabled; drawBtn.disabled = false;
             drawBtn.onclick = () => { actionTriggered = true; };
 
             try {
-                drawBtn.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'touch', clientX: 50, clientY: 50 }));
+                drawBtn.dispatchEvent(new PointerEvent('pointerdown', { pointerId: 77, pointerType: 'touch', clientX: 50, clientY: 50 }));
                 await new Promise(r => setTimeout(r, 550));
                 drawBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
 
@@ -14406,8 +14830,40 @@
                 assert(bubble !== null && bubble.textContent.length > 0, "Une bulle d'aide doit s'afficher lors d'un appui long");
                 return "Appui long 500 ms affiche le toast et supprime le clic de déclenchement";
             } finally {
+                drawBtn.disabled = origDisabled;
                 drawBtn.onclick = originalHandler;
                 clearAllNotifications();
+            }
+        });
+
+        await runTestCase("Multi-sélection chip, astuces onShown / tip-bubble et déplacement bouton", () => {
+            const savedState = gameState, savedHand = playerHand.map(cloneTile), savedHints = hintsEnabled, savedSeen = localStorage.getItem('rummikub_tips_seen');
+            try {
+                tileAssertSilenced = true; gameState = 'PLAYER_TURN'; hintsEnabled = true;
+                playerHand = [{ id: 99991, value: 1, color: 'red' }, { id: 99992, value: 2, color: 'blue' }, { id: 99993, value: 3, color: 'yellow' }];
+                clearTapSelection();
+                handleTileTap(99991, 'rack', -1, 0, playerHand[0]); handleTileTap(99992, 'rack', -1, 1, playerHand[1]); handleTileTap(99993, 'rack', -1, 2, playerHand[2]);
+                const chip = document.getElementById('multi-select-chip');
+                assert(chip && chip.style.display !== 'none' && chip.textContent.includes("3 tuiles sélectionnées"), "Chip 3 tuiles visible");
+                clearTapSelection(); localStorage.removeItem('rummikub_tips_seen'); clearAllNotifications();
+                notify({ text: "Alerte bloquante", kind: 'alert', ttlMs: 10000 });
+                showTipOnce('stale_tip', 'Astuce périmée');
+                assert(bubbleQueue.length === 1, "Astuce en file");
+                bubbleQueue[0].createdAt = Date.now() - 5000;
+                closeCurrentBubble();
+                assert(!JSON.parse(localStorage.getItem('rummikub_tips_seen') || '[]').includes('stale_tip'), "Périmée non stockée");
+                clearAllNotifications(); showTipOnce('shown_tip', 'Astuce affichée');
+                const b = document.querySelector('#notify-bubbles .notify-bubble');
+                assert(b && b.classList.contains('tip-bubble'), "Bulle tip-bubble");
+                assert(JSON.parse(localStorage.getItem('rummikub_tips_seen') || '[]').includes('shown_tip'), "Affichée stockée");
+                renderAnalyticsData();
+                assert(document.querySelector('.card-settings .btn-reset-tips') !== null, "Bouton dans réglages");
+                assert(document.querySelector('.heatmap-jokers-bar .btn-reset-tips') === null, "Bouton absent jokers");
+                return "Chip, astuces onShown / tip-bubble et bouton réglages validés";
+            } finally {
+                gameState = savedState; playerHand = savedHand; hintsEnabled = savedHints;
+                if (savedSeen !== null) localStorage.setItem('rummikub_tips_seen', savedSeen); else localStorage.removeItem('rummikub_tips_seen');
+                clearTapSelection(); clearAllNotifications(); tileAssertSilenced = false; updateUI();
             }
         });
 
@@ -17128,6 +17584,314 @@
             return `Arrêt anticipé en ${Math.round(dur)} ms au lieu d'attendre les 3000 ms`;
         });
 
+        await runTestCase("Multi-sélection chevalet : sélection, bascule, affichage du chip et clearTapSelection", () => {
+            const savedState = gameState, savedHand = playerHand.map(cloneTile);
+            try {
+                tileAssertSilenced = true; gameState = 'PLAYER_TURN';
+                playerHand = [{ id: 99901, value: 1, color: 'red' }, { id: 99902, value: 2, color: 'blue' }, { id: 99903, value: 3, color: 'yellow' }];
+                clearTapSelection();
+                handleTileTap(99901, 'rack', -1, 0, playerHand[0]);
+                handleTileTap(99902, 'rack', -1, 1, playerHand[1]);
+                handleTileTap(99903, 'rack', -1, 2, playerHand[2]);
+                assert(multiSelectedIds.length === 3, "3 tuiles sélectionnées attendues");
+                const chip = document.getElementById('multi-select-chip');
+                assert(chip && chip.textContent.includes("3 tuiles sélectionnées"), "Texte 3 tuiles attendu");
+                handleTileTap(99902, 'rack', -1, 1, playerHand[1]);
+                assert(multiSelectedIds.length === 2 && !multiSelectedIds.includes(99902), "Désélection du 2e tap");
+                assert(chip && chip.textContent.includes("2 tuiles sélectionnées"), "Texte 2 tuiles attendu");
+                clearTapSelection();
+                assert(multiSelectedIds.length === 0 && chip && chip.style.display === 'none', "clearTapSelection vide tout");
+                return "3 taps -> 3 ids, second tap désélectionne, clearTapSelection vide et masque le chip";
+            } finally {
+                gameState = savedState; playerHand = savedHand; clearTapSelection(); tileAssertSilenced = false; updateUI();
+            }
+        });
+
+        await runTestCase("Multi-sélection : déplacement vers nouveau meld et meld existant", () => {
+            const savedState = gameState, savedHand = playerHand.map(cloneTile), savedBoard = cloneRows(boardRows), savedBackupHand = backupPlayerHand.map(cloneTile), savedBackupBoard = cloneRows(backupBoardRows), savedOpened = playerOpened;
+            try {
+                tileAssertSilenced = true; gameState = 'PLAYER_TURN'; playerOpened = true;
+                playerHand = [{ id: 99910, value: 10, color: 'red' }, { id: 99911, value: 11, color: 'red' }, { id: 99912, value: 12, color: 'red' }, { id: 99909, value: 9, color: 'red' }, { id: 99913, value: 13, color: 'red' }];
+                boardRows = []; backupPlayerHand = playerHand.map(cloneTile); backupBoardRows = [];
+                clearTapSelection();
+                handleTileTap(99910, 'rack', -1, 0, playerHand[0]);
+                handleTileTap(99911, 'rack', -1, 1, playerHand[1]);
+                handleTileTap(99912, 'rack', -1, 2, playerHand[2]);
+                handleBoardContainerClick({ target: document.getElementById('board-container') });
+                assert(boardRows.length === 1 && boardRows[0].tiles.length === 3, "1 nouvelle rangée de 3 tuiles attendue");
+                assert(validateTurn(backupBoardRows, boardRows, backupPlayerHand, playerHand, playerOpened).valid, "validateTurn doit être valide");
+                handleTileTap(99909, 'rack', -1, 0, playerHand[0]);
+                handleTileTap(99913, 'rack', -1, 1, playerHand[1]);
+                const rowEl = document.querySelector(`.meld-row[data-row-id="${boardRows[0].id}"]`);
+                if (rowEl) rowEl.click(); else handleTileTap(boardRows[0].tiles[0].id, 'board', boardRows[0].id, 0, boardRows[0].tiles[0]);
+                assert(boardRows[0].tiles.length === 5 && [99909, 99913].every(id => boardRows[0].tiles.some(t => t.id === id)), "La rangée contient 9 et 13 rouge");
+                return "1 rangée créée avec 10-11-12 rouge valide et 2 tuiles ajoutées à la rangée";
+            } finally {
+                gameState = savedState; playerHand = savedHand; boardRows = savedBoard; backupPlayerHand = savedBackupHand; backupBoardRows = savedBackupBoard; playerOpened = savedOpened; clearTapSelection(); tileAssertSilenced = false; updateUI();
+            }
+        });
+
+        await runTestCase("Glisser groupé souris : dépôt sur placeholder crée 1 rangée, dépôt sur chevalet ne déplace rien", () => {
+            const savedState = gameState, savedHand = playerHand.map(cloneTile), savedBoard = cloneRows(boardRows), savedBackupHand = backupPlayerHand.map(cloneTile), savedBackupBoard = cloneRows(backupBoardRows), savedOpened = playerOpened;
+            try {
+                tileAssertSilenced = true; gameState = 'PLAYER_TURN'; playerOpened = true;
+                playerHand = [{ id: 99941, value: 1, color: 'red' }, { id: 99942, value: 2, color: 'red' }, { id: 99943, value: 3, color: 'red' }, { id: 99944, value: 4, color: 'red' }];
+                boardRows = []; backupPlayerHand = playerHand.map(cloneTile); backupBoardRows = [];
+                clearTapSelection();
+                handleTileTap(99941, 'rack', -1, 0, playerHand[0]);
+                handleTileTap(99942, 'rack', -1, 1, playerHand[1]);
+                handleTileTap(99943, 'rack', -1, 2, playerHand[2]);
+                assert(multiSelectedIds.length === 3, "3 tuiles sélectionnées");
+                onTilePointerDown({ pointerId: 1, pointerType: 'mouse', clientX: 100, clientY: 100, button: 0, target: document.body }, 99942, 'rack', -1);
+                onWindowPointerMove({ pointerId: 1, clientX: 120, clientY: 120 });
+                assert(pointerState.isDragging && pointerState.groupIds && pointerState.groupIds.length === 3, "Drag groupé actif avec 3 ids");
+                const ghostBadge = pointerState.ghostEl?.querySelector('.ghost-group-badge');
+                assert(ghostBadge && ghostBadge.textContent === '×3', "Badge ×3 sur le fantôme");
+                pointerState.currentTargetEl = getOrCreateNewMeldPlaceholder();
+                onWindowPointerUp({ pointerId: 1, clientX: 200, clientY: 200 });
+                assert(boardRows.length === 1 && boardRows[0].tiles.length === 3, "1 rangée avec 3 tuiles attendue");
+                assert([99941, 99942, 99943].every(id => boardRows[0].tiles.some(t => t.id === id)), "Les 3 tuiles sont sur le plateau");
+                assert(multiSelectedIds.length === 0, "Sélection vidée après dépôt");
+                handleTileTap(99944, 'rack', -1, 0, playerHand[0]); playerHand.push({ id: 99945, value: 5, color: 'red' }); handleTileTap(99945, 'rack', -1, 1, playerHand[1]);
+                onTilePointerDown({ pointerId: 2, pointerType: 'mouse', clientX: 100, clientY: 100, button: 0, target: document.body }, 99944, 'rack', -1);
+                onWindowPointerMove({ pointerId: 2, clientX: 120, clientY: 120 });
+                pointerState.currentTargetEl = document.getElementById('player-rack');
+                onWindowPointerUp({ pointerId: 2, clientX: 100, clientY: 500 });
+                assert(boardRows.length === 1 && boardRows[0].tiles.length === 3 && playerHand.length === 2, "Chevalet et plateau inchangés");
+                return "Dépôt sur placeholder crée 1 rangée de 3 tuiles, dépôt sur chevalet ne déplace rien";
+            } finally {
+                cancelPointerDrag(); clearTapSelection(); gameState = savedState; playerHand = savedHand; boardRows = savedBoard; backupPlayerHand = savedBackupHand; backupBoardRows = savedBackupBoard; playerOpened = savedOpened; tileAssertSilenced = false; updateUI();
+            }
+        });
+
+        await runTestCase("Fusion en un tap : détection, affichage du chip et fusion en une rangée", () => {
+            const savedState = gameState, savedHand = playerHand.map(cloneTile), savedBoard = cloneRows(boardRows), savedBHand = backupPlayerHand.map(cloneTile), savedBBoard = cloneRows(backupBoardRows), savedOpened = playerOpened;
+            try {
+                tileAssertSilenced = true; gameState = 'PLAYER_TURN'; playerOpened = true;
+                const t10 = { id: 99981, value: 10, color: 'red', isJoker: false }, t11 = { id: 99982, value: 11, color: 'red', isJoker: false }, t12 = { id: 99983, value: 12, color: 'red', isJoker: false };
+                backupPlayerHand = [cloneTile(t10), cloneTile(t11), cloneTile(t12)]; playerHand = [];
+                boardRows = [{ id: 8881, type: 'run', tiles: [cloneTile(t10)] }, { id: 8882, type: 'run', tiles: [cloneTile(t11), cloneTile(t12)] }];
+                backupBoardRows = [];
+                updateUI();
+                const btn1 = document.querySelector('.meld-row[data-row-id="8881"] .btn-merge-meld');
+                const row2 = document.querySelector('.meld-row[data-row-id="8882"]');
+                assert(btn1 && btn1.getAttribute('aria-label').includes('Fusionner') && btn1.textContent.includes('10-11-12'), "La rangée cible 8881 doit afficher la pastille ⇄ 10-11-12");
+                assert(row2 && row2.classList.contains('merge-group') && row2.getAttribute('data-merge-group') === '1' && !row2.querySelector('.btn-merge-meld'), "8882 : dans le groupe 1, sans bouton");
+
+                btn1.click();
+                assert(boardRows.length === 1 && boardRows[0].tiles.length === 3, "Exactement 1 rangée de 3 tuiles après fusion");
+                assert(boardRows[0].tiles.map(t => t.value).sort((a,b)=>a-b).join('-') === '10-11-12', "La rangée contient 10-11-12 rouge");
+                boardRows = [{ id: 8883, type: 'run', tiles: [cloneTile(t10)] }, { id: 8884, type: 'run', tiles: [cloneTile(t11), cloneTile(t12)] }];
+                backupBoardRows = [{ id: 8883, type: 'run', tiles: [cloneTile(t10)] }];
+                updateUI();
+                assert(!document.querySelector('.meld-row[data-row-id="8883"] .btn-merge-meld'), "La rangée présente dans backupBoardRows ne doit pas afficher le chip");
+                return "Chips affichés, fusion en 10-11-12 et backupBoardRows ignoré validés";
+            } finally {
+                gameState = savedState; playerHand = savedHand; boardRows = savedBoard; backupPlayerHand = savedBHand; backupBoardRows = savedBBoard; playerOpened = savedOpened; clearTapSelection(); tileAssertSilenced = false; updateUI();
+            }
+        });
+
+        await runTestCase("Alerte fusion si rangées fusionnables lors de la validation", () => {
+            const savedState = gameState, savedHand = playerHand.map(cloneTile), savedBoard = cloneRows(boardRows), savedBHand = backupPlayerHand.map(cloneTile), savedBBoard = cloneRows(backupBoardRows), savedOpened = playerOpened;
+            try {
+                tileAssertSilenced = true; gameState = 'PLAYER_TURN'; playerOpened = true;
+                const t10 = { id: 99971, value: 10, color: 'red', isJoker: false }, t11 = { id: 99972, value: 11, color: 'red', isJoker: false }, t12 = { id: 99973, value: 12, color: 'red', isJoker: false };
+                backupPlayerHand = [cloneTile(t10), cloneTile(t11), cloneTile(t12)]; playerHand = [];
+                boardRows = [{ id: 8871, type: 'run', tiles: [cloneTile(t10)] }, { id: 8872, type: 'run', tiles: [cloneTile(t11), cloneTile(t12)] }];
+                backupBoardRows = [];
+                clearAllNotifications();
+                validatePlayerTurn();
+                const bubble = document.querySelector('#notify-bubbles .notify-bubble');
+                assert(bubble !== null, "Une bulle doit être affichée");
+                assert(bubble.textContent.includes('plusieurs lignes'), "Le texte doit contenir 'plusieurs lignes'");
+                assert(bubble.textContent.includes('10, 11 et 12 rouge'), "Le texte doit contenir '10, 11 et 12 rouge'");
+                return "Bulle d'alerte spécifique à la fusion affichée avec '10, 11 et 12 rouge' et 'plusieurs lignes'";
+            } finally {
+                gameState = savedState; playerHand = savedHand; boardRows = savedBoard; backupPlayerHand = savedBHand; backupBoardRows = savedBBoard; playerOpened = savedOpened; clearAllNotifications(); tileAssertSilenced = false; updateUI();
+            }
+        });
+
+        await runTestCase("showTipOnce et réaffichage des astuces", () => {
+            const savedHints = hintsEnabled, savedSeen = localStorage.getItem('rummikub_tips_seen');
+            try {
+                tileAssertSilenced = true;
+                hintsEnabled = true; localStorage.removeItem('rummikub_tips_seen'); clearAllNotifications();
+                showTipOnce('test_tip', 'Astuce test 1');
+                const b1 = document.querySelectorAll('#notify-bubbles .notify-bubble').length;
+                showTipOnce('test_tip', 'Astuce test 1');
+                const b2 = document.querySelectorAll('#notify-bubbles .notify-bubble').length;
+                const seen = JSON.parse(localStorage.getItem('rummikub_tips_seen') || '[]');
+                assert(b1 === 1 && b2 === 1 && seen.includes('test_tip'), "1 seule bulle affichée et 'test_tip' stocké");
+                clearAllNotifications(); hintsEnabled = false;
+                showTipOnce('test_tip_2', 'Astuce test 2');
+                assert(document.querySelectorAll('#notify-bubbles .notify-bubble').length === 0, "Aucune bulle quand hintsEnabled est faux");
+                const btn = document.querySelector('.btn-reset-tips');
+                if (btn) btn.click(); else resetTipsSeen();
+                assert(localStorage.getItem('rummikub_tips_seen') === null, "Le bouton vide la clé rummikub_tips_seen");
+                return "1 bulle max, id stocké, hintsEnabled=false inerte, bouton vide la clé";
+            } finally {
+                hintsEnabled = savedHints;
+                if (savedSeen !== null) localStorage.setItem('rummikub_tips_seen', savedSeen);
+                else localStorage.removeItem('rummikub_tips_seen');
+                clearAllNotifications(); tileAssertSilenced = false;
+            }
+        });
+
+        await runTestCase("showTipOnce déclenché sur rangées fusionnables", () => {
+            const savedState = gameState, savedHand = playerHand.map(cloneTile), savedBoard = cloneRows(boardRows), savedBHand = backupPlayerHand.map(cloneTile), savedBBoard = cloneRows(backupBoardRows), savedHints = hintsEnabled, savedSeen = localStorage.getItem('rummikub_tips_seen');
+            try {
+                tileAssertSilenced = true; gameState = 'PLAYER_TURN'; hintsEnabled = true;
+                localStorage.removeItem('rummikub_tips_seen'); clearAllNotifications();
+                const t10 = { id: 99961, value: 10, color: 'red', isJoker: false }, t11 = { id: 99962, value: 11, color: 'red', isJoker: false }, t12 = { id: 99963, value: 12, color: 'red', isJoker: false };
+                backupPlayerHand = [cloneTile(t10), cloneTile(t11), cloneTile(t12)]; playerHand = [];
+                boardRows = [{ id: 8861, type: 'run', tiles: [cloneTile(t10)] }, { id: 8862, type: 'run', tiles: [cloneTile(t11), cloneTile(t12)] }];
+                backupBoardRows = [];
+                updateUI();
+                const b1 = document.querySelectorAll('#notify-bubbles .notify-bubble');
+                assert(b1.length === 1 && b1[0].textContent.includes('une seule ligne'), "Bulle avec 'une seule ligne' attendue");
+                updateUI();
+                assert(document.querySelectorAll('#notify-bubbles .notify-bubble').length === 1, "Aucune nouvelle bulle au 2e updateUI");
+                return "Bulle 'une seule ligne' affichée une seule fois sur updateUI";
+            } finally {
+                gameState = savedState; playerHand = savedHand; boardRows = savedBoard; backupPlayerHand = savedBHand; backupBoardRows = savedBBoard; hintsEnabled = savedHints;
+                if (savedSeen !== null) localStorage.setItem('rummikub_tips_seen', savedSeen); else localStorage.removeItem('rummikub_tips_seen');
+                clearAllNotifications(); tileAssertSilenced = false; updateUI();
+            }
+        });
+
+        await runTestCase("Fusion de rangées avec Joker : détection, badge 12, groupe, rejet et alerte", () => {
+            const savedState = gameState, savedHand = playerHand.map(cloneTile), savedBoard = cloneRows(boardRows), savedBHand = backupPlayerHand.map(cloneTile), savedBBoard = cloneRows(backupBoardRows), savedOpened = playerOpened;
+            try {
+                tileAssertSilenced = true; gameState = 'PLAYER_TURN'; playerOpened = true;
+                const t11 = { id: 99951, value: 11, color: 'blue', isJoker: false }, tJ = { id: 99952, value: 0, color: 'black', isJoker: true }, t13 = { id: 99953, value: 13, color: 'blue', isJoker: false };
+                backupPlayerHand = [cloneTile(t11), cloneTile(tJ), cloneTile(t13)]; playerHand = []; backupBoardRows = [];
+                boardRows = [{ id: 8851, type: 'run', tiles: [cloneTile(t11)] }, { id: 8852, type: 'run', tiles: [cloneTile(tJ)] }, { id: 8853, type: 'run', tiles: [cloneTile(t13)] }];
+                updateUI();
+                const btn0 = document.querySelector('.meld-row[data-row-id="8851"] .btn-merge-meld');
+                assert(btn0 && btn0.getAttribute('aria-label').includes('Fusionner'), "La pastille doit être sur 8851");
+                assert([8852, 8853].every(id => { const r = document.querySelector(`.meld-row[data-row-id="${id}"]`); return r && r.classList.contains('merge-group') && !r.querySelector('.btn-merge-meld'); }), "8852 et 8853 : dans le groupe, sans bouton");
+                btn0.click();
+
+                assert(boardRows.length === 1 && boardRows[0].tiles.length === 3, "1 rangée fusionnée attendue");
+                assert(validateTurn(backupBoardRows, boardRows, backupPlayerHand, playerHand, playerOpened).valid, "validateTurn doit être valide");
+                const badge = document.querySelector('.meld-row[data-row-id="8851"] .joker-sub-badge');
+                assert(badge && badge.textContent === '12', "Le joker doit afficher le badge 12");
+                const t8r = { id: 99954, value: 8, color: 'red', isJoker: false }, t8b = { id: 99955, value: 8, color: 'blue', isJoker: false }, tJ2 = { id: 99956, value: 0, color: 'red', isJoker: true };
+                backupPlayerHand = [cloneTile(t8r), cloneTile(t8b), cloneTile(tJ2)];
+                boardRows = [{ id: 8854, type: 'group', tiles: [cloneTile(t8r)] }, { id: 8855, type: 'group', tiles: [cloneTile(t8b)] }, { id: 8856, type: 'group', tiles: [cloneTile(tJ2)] }];
+                updateUI();
+                const btnG = document.querySelector('.meld-row[data-row-id="8854"] .btn-merge-meld');
+                assert(btnG !== null, "Le chip Fusionner doit être affiché pour le groupe");
+                btnG.click();
+                assert(boardRows.length === 1 && isValidMeldFast(boardRows[0].tiles, 'group'), "Groupe fusionné valide");
+                const t3b = { id: 99957, value: 3, color: 'blue', isJoker: false };
+                backupPlayerHand = [cloneTile(t11), cloneTile(t3b), cloneTile(tJ)];
+                boardRows = [{ id: 8857, type: 'run', tiles: [cloneTile(t11)] }, { id: 8858, type: 'run', tiles: [cloneTile(t3b)] }, { id: 8859, type: 'run', tiles: [cloneTile(tJ)] }];
+                updateUI();
+                assert(document.querySelector('.meld-row[data-row-id="8857"] .btn-merge-meld') !== null, "Chip présent sur 8857");
+                assert(document.querySelector('.meld-row[data-row-id="8859"]')?.classList.contains('merge-group') && !document.querySelector('.meld-row[data-row-id="8859"] .btn-merge-meld'), "8859 dans le groupe, sans bouton");
+                assert(document.querySelector('.meld-row[data-row-id="8858"] .btn-merge-meld') === null, "Chip absent sur 8858");
+                backupPlayerHand = [cloneTile(t11), cloneTile(t3b)];
+                boardRows = [{ id: 8860, type: 'run', tiles: [cloneTile(t11)] }, { id: 8861, type: 'run', tiles: [cloneTile(t3b)] }];
+                updateUI();
+                assert(document.querySelectorAll('.btn-merge-meld').length === 0, "Aucun chip pour 11-3 sans joker");
+                backupPlayerHand = [cloneTile(t11), cloneTile(tJ), cloneTile(t13)];
+                boardRows = [{ id: 8851, type: 'run', tiles: [cloneTile(t11)] }, { id: 8852, type: 'run', tiles: [cloneTile(tJ)] }, { id: 8853, type: 'run', tiles: [cloneTile(t13)] }];
+                clearAllNotifications(); validatePlayerTurn();
+                const bubble = document.querySelector('#notify-bubbles .notify-bubble');
+                assert(bubble && bubble.textContent.includes('Joker') && bubble.textContent.includes('plusieurs lignes'), "Bulle alerte avec 'Joker' et 'plusieurs lignes'");
+                return "Fusion avec joker, badge 12, groupe valide, sélection 11-J / rejet 3 et bulle avec 'Joker' validés";
+            } finally {
+                gameState = savedState; playerHand = savedHand; boardRows = savedBoard; backupPlayerHand = savedBHand; backupBoardRows = savedBBoard; playerOpened = savedOpened; clearTapSelection(); clearAllNotifications(); tileAssertSilenced = false; updateUI();
+            }
+        });
+
+        await runTestCase("Surlignage .drop-suggest lors du glisser depuis le chevalet", () => {
+            const savedState = gameState, savedHand = playerHand.map(cloneTile), savedBoard = cloneRows(boardRows), savedBHand = backupPlayerHand.map(cloneTile), savedBBoard = cloneRows(backupBoardRows), savedOpened = playerOpened;
+            try {
+                tileAssertSilenced = true; gameState = 'PLAYER_TURN'; playerOpened = true;
+                const r456 = { id: 98401, type: 'run', tiles: [4, 5, 6].map(v => ({ id: 98410 + v, value: v, color: 'red', isJoker: false })) };
+                const r999 = { id: 98402, type: 'group', tiles: ['blue', 'yellow', 'black'].map((c, i) => ({ id: 98420 + i, value: 9, color: c, isJoker: false })) };
+                const t7r = { id: 98407, value: 7, color: 'red', isJoker: false };
+                backupBoardRows = [cloneRows([r456])[0], cloneRows([r999])[0]];
+                boardRows = [cloneRows([r456])[0], cloneRows([r999])[0]];
+                playerHand = [cloneTile(t7r)]; backupPlayerHand = [cloneTile(t7r)];
+                updateUI();
+                pointerState.active = true; pointerState.isDragging = false; pointerState.sourceZone = 'rack'; pointerState.tileId = t7r.id; pointerState.tileObj = t7r;
+                initiatePointerDrag(100, 100);
+                const bc = document.getElementById('board-container');
+                const el456 = document.querySelector('.meld-row[data-row-id="98401"]'), el999 = document.querySelector('.meld-row[data-row-id="98402"]');
+                assert(bc?.classList.contains('has-drop-suggest') && el456?.classList.contains('drop-suggest') && !el999?.classList.contains('drop-suggest'), "Surlignage actif");
+                assert(parseFloat(window.getComputedStyle(el999).opacity) < 0.5 && window.getComputedStyle(el456).outlineStyle === 'solid', "Opacité atténuée et contour solide");
+                cancelPointerDrag();
+                assert(!bc?.classList.contains('has-drop-suggest') && document.querySelectorAll('.drop-suggest').length === 0, "has-drop-suggest et drop-suggest nettoyés");
+                assert(parseFloat(window.getComputedStyle(el456).opacity) === 1 && parseFloat(window.getComputedStyle(el999).opacity) === 1, "Opacité rétablie à 1");
+                return ".drop-suggest ciblé et nettoyé avec succès";
+            } finally { cancelPointerDrag(); gameState = savedState; playerHand = savedHand; boardRows = savedBoard; backupPlayerHand = savedBHand; backupBoardRows = savedBBoard; playerOpened = savedOpened; clearTapSelection(); tileAssertSilenced = false; updateUI(); }
+        });
+		
+		await runTestCase("Fusion UI : table 4-5-6 rouge + 7 rouge du chevalet et multi-groupes 1 et 2", () => {
+            const savedState = gameState, savedHand = playerHand.map(cloneTile), savedBoard = cloneRows(boardRows), savedBHand = backupPlayerHand.map(cloneTile), savedBBoard = cloneRows(backupBoardRows), savedOpened = playerOpened, savedPlan = mergePlanCache;
+            try {
+                tileAssertSilenced = true; gameState = 'PLAYER_TURN'; playerOpened = true;
+                const tr = { id: 98100, type: 'run', tiles: [4, 5, 6].map(v => ({ id: 98100 + v, value: v, color: 'red', isJoker: false })) }, t7 = { id: 98107, value: 7, color: 'red', isJoker: false }, nr = { id: 98101, type: 'run', tiles: [cloneTile(t7)] };
+                backupBoardRows = [cloneRows([tr])[0]]; boardRows = [cloneRows([tr])[0], nr]; backupPlayerHand = [cloneTile(t7)]; playerHand = []; updateUI();
+                const chip = document.querySelector(`.meld-row[data-row-id="${nr.id}"] .btn-merge-meld`);
+                assert(chip !== null, "Le chip doit être affiché"); chip.click();
+                assert(boardRows.length === 1 && boardRows[0].id === tr.id && boardRows[0].tiles.map(t => t.value).join('-') === '4-5-6-7', "Fusion sur ligne table 4-5-6-7");
+                assert(validateTurn(backupBoardRows, boardRows, backupPlayerHand, playerHand, playerOpened).valid, "validateTurn valide");
+                const t11b = { id: 98211, value: 11, color: 'blue', isJoker: false }, tJ = { id: 98212, value: 0, color: 'black', isJoker: true }, t13b = { id: 98213, value: 13, color: 'blue', isJoker: false };
+                const t8r = { id: 98214, value: 8, color: 'red', isJoker: false }, t8b = { id: 98215, value: 8, color: 'blue', isJoker: false }, t8y = { id: 98216, value: 8, color: 'yellow', isJoker: false };
+                backupPlayerHand = [t11b, tJ, t13b, t8r, t8b, t8y].map(cloneTile); playerHand = []; backupBoardRows = [];
+                boardRows = [{ id: 98201, type: 'run', tiles: [cloneTile(t11b)] }, { id: 98202, type: 'run', tiles: [cloneTile(tJ)] }, { id: 98203, type: 'run', tiles: [cloneTile(t13b)] }, { id: 98204, type: 'group', tiles: [cloneTile(t8r)] }, { id: 98205, type: 'group', tiles: [cloneTile(t8b)] }, { id: 98206, type: 'group', tiles: [cloneTile(t8y)] }];
+                updateUI();
+                const r1 = document.querySelector('.meld-row[data-row-id="98201"]'), r4 = document.querySelector('.meld-row[data-row-id="98204"]');
+                assert(r1 && r1.getAttribute('data-merge-group') === '1' && r4 && r4.getAttribute('data-merge-group') === '2', "Groupes 1 et 2");
+                const b1 = r1.querySelector('.merge-num'), b4 = r4.querySelector('.merge-num'), chip1 = r1.querySelector('.btn-merge-meld');
+                assert(b1 && b1.textContent === '1' && b4 && b4.textContent === '2', "Badges 1 et 2");
+                assert(chip1 && chip1.title.includes('11-12-13 bleu'), "Title contient 11-12-13 bleu");
+                const tag2 = document.querySelector('.meld-row[data-row-id="98202"] .merge-num-tag');
+                assert(tag2 && tag2.textContent === '1', "Le numéro ① doit être affiché sur 98202");
+                return "Fusion table et multi-groupes 1 et 2 validés";
+            } finally { mergePlanCache = savedPlan; gameState = savedState; playerHand = savedHand; boardRows = savedBoard; backupPlayerHand = savedBHand; backupBoardRows = savedBBoard; playerOpened = savedOpened; clearTapSelection(); clearAllNotifications(); tileAssertSilenced = false; updateUI(); }
+        });
+		
+        await runTestCase("Fusion : une seule pastille par groupe et aucun bouton global", () => {
+            const savedState = gameState, savedHand = playerHand.map(cloneTile), savedBoard = cloneRows(boardRows), savedBHand = backupPlayerHand.map(cloneTile), savedBBoard = cloneRows(backupBoardRows), savedOpened = playerOpened;
+            try {
+                tileAssertSilenced = true; gameState = 'PLAYER_TURN'; playerOpened = true;
+                const t11 = { id: 98501, value: 11, color: 'blue', isJoker: false }, tJ = { id: 98502, value: 0, color: 'black', isJoker: true }, t13 = { id: 98503, value: 13, color: 'blue', isJoker: false };
+                backupPlayerHand = [t11, tJ, t13].map(cloneTile); playerHand = []; backupBoardRows = [];
+                boardRows = [{ id: 98511, type: 'run', tiles: [cloneTile(t11)] }, { id: 98512, type: 'run', tiles: [cloneTile(tJ)] }, { id: 98513, type: 'run', tiles: [cloneTile(t13)] }];
+                updateUI();
+                const pills = document.querySelectorAll('#board-melds-container .btn-merge-meld');
+                assert(pills.length === 1, `Exactement 1 pastille attendue, obtenu ${pills.length}`);
+                assert(pills[0].textContent.includes('11-12-13'), `La pastille doit afficher 11-12-13, obtenu "${pills[0].textContent}"`);
+                assert(pills[0].title.includes('Regrouper →'), "Le title doit contenir « Regrouper → »");
+                assert(document.getElementById('btn-merge-all') === null, "#btn-merge-all ne doit plus exister");
+                assert(typeof window.applyAllMerges === 'undefined', "applyAllMerges ne doit plus exister");
+                return "1 seule pastille « ⇄ 11-12-13 », aucun bouton global";
+            } finally {
+                gameState = savedState; playerHand = savedHand; boardRows = savedBoard; backupPlayerHand = savedBHand; backupBoardRows = savedBBoard; playerOpened = savedOpened; clearTapSelection(); clearAllNotifications(); tileAssertSilenced = false; updateUI();
+            }
+        });
+		
+		await runTestCase("Feuille d'aide 'Comment jouer ?' : affichage, tuiles exemple, fermeture Échap, états inchangés", () => {
+            const sHand = JSON.stringify(playerHand), sAi = JSON.stringify(aiHand), sBoard = JSON.stringify(boardRows), sPool = JSON.stringify(pool);
+            const savedSeen = localStorage.getItem('rummikub_help_seen');
+            try {
+                tileAssertSilenced = true; localStorage.removeItem('rummikub_help_seen');
+                openHelpModal();
+                const overlay = document.getElementById('help-overlay');
+                assert(overlay && overlay.style.display !== 'none' && [10, 11, 12].every(v => overlay.textContent.includes(String(v))), "Feuille ouverte et tuiles 10, 11, 12 présentes");
+                window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+                assert(overlay.style.display === 'none', "Échap ferme #help-overlay");
+                assert(JSON.stringify(playerHand) === sHand && JSON.stringify(aiHand) === sAi && JSON.stringify(boardRows) === sBoard && JSON.stringify(pool) === sPool, "États inchangés");
+                assert(localStorage.getItem('rummikub_help_seen') === '1', "rummikub_help_seen stocké à 1");
+                return "#help-overlay affiché avec tuiles 10-11-12, fermé par Échap, états inchangés et rummikub_help_seen stocké";
+            } finally { closeHelpModal(); if (savedSeen !== null) localStorage.setItem('rummikub_help_seen', savedSeen); else localStorage.removeItem('rummikub_help_seen'); tileAssertSilenced = false; }
+        });
+
         await runTestCase("Garde-fou : aucune fenêtre plein écran laissée ouverte par les tests", () => {
             const goOverlay = document.getElementById('game-over-overlay');
             const starterOverlay = document.getElementById('starter-draw-overlay');
@@ -17494,5 +18258,37 @@
     });
   }
 </script>
+<script>
+    // Surlignage bleu (.drop-suggest) : seulement avec les Aides, et priorité aux nouvelles lignes du tour
+    let refiningDropSuggest = false;
+    function refineDropSuggest() {
+        if (refiningDropSuggest) return;
+        const bc = document.getElementById('board-container');
+        if (!bc) return;
+        const sugg = Array.from(bc.querySelectorAll('.meld-row.drop-suggest'));
+        if (!sugg.length) return;
+        refiningDropSuggest = true;
+        try {
+            if (!hintsEnabled) {
+                sugg.forEach(el => el.classList.remove('drop-suggest'));
+                bc.classList.remove('has-drop-suggest');
+                return;
+            }
+            const backupIds = new Set(backupBoardRows.map(r => String(r.id)));
+            const fresh = sugg.filter(el => !backupIds.has(el.getAttribute('data-row-id')));
+            if (fresh.length && fresh.length < sugg.length) {
+                sugg.filter(el => !fresh.includes(el)).forEach(el => el.classList.remove('drop-suggest'));
+            }
+        } finally { refiningDropSuggest = false; }
+    }
+    (function initDropSuggestObserver() {
+        const start = () => {
+            const bc = document.getElementById('board-container');
+            if (bc) new MutationObserver(refineDropSuggest).observe(bc, { attributes: true, attributeFilter: ['class'], subtree: true });
+        };
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+    })();
+</script>
+
 </body>
 </html>
