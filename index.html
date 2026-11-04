@@ -2471,6 +2471,30 @@
         .badge-pass { background: #10b981; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
         .badge-fail { background: #ef4444; color: white; padding: 2px 6px; border-radius: 4px; font-weight: bold; }
 
+        .go-actions-bar {
+            display: flex;
+            gap: 10px;
+            margin-top: 8px;
+            position: sticky;
+            bottom: 0;
+            background: var(--surface);
+            padding-top: 6px;
+            z-index: 10;
+        }
+        .go-actions-bar .btn-game {
+            flex: 1;
+            white-space: normal;
+            text-align: center;
+            line-height: 1.2;
+            padding: 8px 10px;
+            font-size: 0.95rem;
+        }
+        @media (max-width: 480px) {
+            #game-over-overlay .modal-card { padding: 16px 12px; gap: 10px; }
+            .go-actions-bar { flex-direction: column; gap: 8px; }
+            .go-actions-bar .btn-game { width: 100%; min-height: 44px; height: auto; font-size: 0.92rem; }
+        }
+
         .log-item {
             display: flex;
             align-items: flex-start;
@@ -2990,9 +3014,9 @@
         </div>
         <div id="go-stats-bilan"></div>
         <div id="go-match-summary-block"></div>
-        <div style="display:flex; gap:10px; margin-top:8px; position:sticky; bottom:0; background:var(--surface); padding-top:6px; z-index:10;">
-            <button class="btn-game success" id="go-btn-next-round" style="flex:1;" onclick="handleNextRoundClick()">Manche suivante</button>
-            <button class="btn-game secondary" id="go-btn-new-match" style="flex:1;" onclick="startNewMatch()">Nouveau Match</button>
+        <div class="go-actions-bar">
+            <button class="btn-game success" id="go-btn-next-round" onclick="handleNextRoundClick()">Manche suivante</button>
+            <button class="btn-game secondary" id="go-btn-new-match" onclick="startNewMatch()">Nouveau match</button>
         </div>
     </div>
 </div>
@@ -8140,12 +8164,12 @@
             }
             matchSummaryBlock.innerHTML = tableHtml + `<div style="margin-top:8px; padding:8px; background:var(--warning-bg); border:1px solid var(--warning); border-radius:6px; text-align:center; color:var(--warning-text); font-size:0.95rem;">${finalVerdict}</div>`;
             btnNextRound.style.display = 'none';
-            btnNewMatch.textContent = "Nouveau Match";
+            btnNewMatch.textContent = "Nouveau match";
         } else {
             matchSummaryBlock.innerHTML = tableHtml;
             btnNextRound.style.display = 'block';
-            btnNextRound.textContent = `Manche suivante (${currentRound + 1} / ${totalRounds})`;
-            btnNewMatch.textContent = "Réinitialiser le match";
+            btnNextRound.textContent = "Manche suivante";
+            btnNewMatch.textContent = "Nouveau match";
         }
 
         showOverlayReliably(overlay, matchFinishedNow ? '#go-btn-new-match' : '#go-btn-next-round');
