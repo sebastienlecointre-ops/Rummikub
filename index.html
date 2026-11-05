@@ -443,7 +443,7 @@
         .main-viewport {
             flex: 1;
             display: grid;
-            grid-template-columns: 1fr 300px;
+            grid-template-columns: minmax(0, 1fr) 300px;
             gap: 12px;
             padding: 12px;
             overflow: hidden;
@@ -452,16 +452,16 @@
         }
         @media (min-width: 1600px) {
             .main-viewport {
-                grid-template-columns: 1fr 320px;
+                grid-template-columns: minmax(0, 1fr) 320px;
             }
         }
         @media (max-width: 1399px) and (min-width: 1101px) {
             .main-viewport {
-                grid-template-columns: 1fr 280px;
+                grid-template-columns: minmax(0, 1fr) 280px;
             }
         }
         .main-viewport.sidebar-collapsed {
-            grid-template-columns: 1fr 56px !important;
+            grid-template-columns: minmax(0, 1fr) 56px !important;
         }
 
         .game-column {
@@ -470,6 +470,7 @@
             position: relative;
             gap: 10px;
             min-height: 0;
+            min-width: 0;
             overflow: hidden;
         }
 
@@ -477,6 +478,7 @@
         .board-container {
             flex: 1;
             container-type: inline-size;
+            min-width: 0;
             --board-zoom: 1;
             --tile-w: calc(clamp(32px, 6vw, 48px) * var(--board-zoom, 1));
             --tile-h: calc(var(--tile-w) * 1.25);
@@ -622,8 +624,9 @@
             flex-wrap: wrap;
             gap: 10px;
             align-content: flex-start;
-            flex: 1;
+            flex: 1 0 auto;
             min-height: 180px;
+            padding-bottom: 8px;
         }
 
         .meld-row {
@@ -751,15 +754,6 @@
             border-radius: 1px;
             transition: background 0.15s ease, transform 0.15s ease;
         }
-        .board-melds-area {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            align-content: flex-start;
-            flex-shrink: 0;
-            min-height: 180px;
-            padding-bottom: 8px;
-        }
         .new-meld-placeholder {
             display: none;
             min-height: calc(var(--tile-h) + 16px);
@@ -847,7 +841,7 @@
 
         .board-melds-area.layout-columns {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 14px;
             width: 100%;
             align-items: start;
@@ -858,21 +852,30 @@
         }
         @container (max-width: 719px) {
             .board-melds-area.layout-columns {
-                grid-template-columns: 1fr;
+                grid-template-columns: minmax(0, 1fr);
+            }
+            .board-col-header {
+                position: static;
             }
         }
         @container (min-width: 720px) {
             .board-melds-area.layout-columns {
-                grid-template-columns: 1fr 1fr;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
             }
         }
         @media (max-width: 768px) and (orientation: portrait) {
             .board-melds-area.layout-columns {
-                grid-template-columns: 1fr;
+                grid-template-columns: minmax(0, 1fr);
+            }
+            .board-col-header {
+                position: static;
             }
         }
         .board-container.board-narrow .board-melds-area.layout-columns {
-            grid-template-columns: 1fr;
+            grid-template-columns: minmax(0, 1fr);
+        }
+        .board-container.board-narrow .board-col-header {
+            position: static;
         }
         .board-col-container {
             display: flex;
@@ -883,6 +886,7 @@
             padding: 10px 8px;
             border: 1px solid var(--panel-glass-border);
             min-height: 140px;
+            min-width: 0;
             transition: border-color 0.15s, background-color 0.15s;
         }
         .board-col-container.drag-target-active {
@@ -2213,10 +2217,10 @@
         /* RESPONSIVE DESIGN (BREAKPOINTS) */
         @media (max-width: 1100px) {
             .main-viewport {
-                grid-template-columns: 1fr;
+                grid-template-columns: minmax(0, 1fr);
             }
             .main-viewport.sidebar-collapsed {
-                grid-template-columns: 1fr !important;
+                grid-template-columns: minmax(0, 1fr) !important;
             }
             .desktop-sidebar {
                 display: none;
@@ -2555,6 +2559,28 @@
             font-size: 0.85rem;
             padding: 24px 12px;
         }
+		/* Boutons du bas selon la largeur du panneau */
+		.player-bottom-panel { container-type: inline-size; container-name: rack-panel; }
+		.btn-game .btn-label { display: none; }
+		@container rack-panel (min-width: 600px) {
+			.action-button-bar #draw-btn,
+			.action-button-bar #validate-btn { flex: 0 0 auto; min-width: 150px; padding: 0 20px; }
+			.action-button-bar #cancel-btn { margin-left: 16px; }
+			.btn-game .btn-label { display: inline; font-size: 0.95rem; }
+		}
+		/* Barre d'outils du tapis : s'adapte à la largeur du tapis, pas de l'écran */
+		.board-top-toolbar .turn-pill { overflow: hidden; }
+		@container (max-width: 560px) {
+			.btn-board-tool span { display: none; }
+			.btn-board-tool { width: 36px; min-width: 36px; padding: 0 !important; justify-content: center; }
+			#board-zoom-slider, #board-zoom-val { display: none !important; }
+			.board-zoom-control { gap: 2px; padding: 1px 4px; }
+			.btn-zoom-step { width: 24px; min-width: 24px; height: 24px; min-height: 24px; font-size: 0.72rem; }
+			.board-tools-right { gap: 4px; }
+		}
+		.btn-zoom-step.active { color: var(--accent-gold); }
+
+
     </style>
 </head>
 <body>
@@ -2589,16 +2615,10 @@
                 <span class="timer-val" id="timer-text">60</span>
             </div>
         </div>
-        <button class="btn-icon" id="btn-layout-toggle" type="button" onclick="toggleBoardLayout()" title="Affichage : Compact — toucher pour passer à Suites / Séries" aria-label="Affichage : Compact — toucher pour passer à Suites / Séries">
-            <i class="fa-solid fa-table-cells-large" id="btn-layout-toggle-icon"></i>
-        </button>
         <div class="nav-pill hide-on-mobile-bar" title="Manche en cours">
             <i class="fa-solid fa-trophy" style="color:var(--accent-gold);"></i>
             <span id="top-round-status">1/2</span>
         </div>
-        <button class="btn-icon hide-on-mobile-bar nav-btn-cb" id="btn-nav-colorblind" onclick="toggleColorblindMode()" title="Mode Daltonien (Symboles)">
-            <i class="fa-solid fa-eye"></i>
-        </button>
         <button class="btn-icon nav-btn-menu" id="btn-nav-drawer" onclick="toggleDrawer(true)" title="Menu & Analyse">
             <i class="fa-solid fa-bars"></i>
         </button>
@@ -2646,10 +2666,13 @@
                     <button class="btn-board-tool" id="btn-last-ai-move" onclick="handleLastAiMoveClick()" title="Revoir le dernier coup joué par l'IA">
                         <i class="fa-solid fa-clock-rotate-left"></i> <span>Dernier coup</span>
                     </button>
-                        <div class="board-zoom-control" title="Zoom du plateau (Ctrl + molette ou +/-) - min 60%">
+					<button class="btn-board-tool" id="btn-layout-toggle" type="button" onclick="toggleBoardLayout()" title="Affichage : Compact — toucher pour passer à Suites / Séries" aria-label="Affichage : Compact — toucher pour passer à Suites / Séries">
+						<i class="fa-solid fa-table-cells-large" id="btn-layout-toggle-icon"></i>
+					</button>
+                    <div class="board-zoom-control" title="Zoom du plateau (Ctrl + molette ou +/-) - min 60%">
                         <button class="btn-zoom-step" onclick="adjustBoardZoom(-0.05)" title="Dézoomer (-)"><i class="fa-solid fa-minus"></i></button>
-                        <button class="btn-zoom-step" id="btn-zoom-fit" onclick="fitBoardZoom()" title="Ajuster le plateau à l'écran" aria-label="Ajuster le plateau à l'écran"><i class="fa-solid fa-expand"></i></button>
-                        <input type="range" id="board-zoom-slider" min="60" max="130" value="100" step="5" oninput="applyBoardZoom(this.value / 100)" title="Niveau de zoom">
+                        <button class="btn-zoom-step" id="btn-zoom-fit" onclick="setZoomMode('auto'); fitBoardZoom()" title="Ajuster le plateau à l'écran" aria-label="Ajuster le plateau à l'écran"><i class="fa-solid fa-expand"></i></button>
+                        <input type="range" id="board-zoom-slider" min="60" max="130" value="100" step="5" oninput="setZoomMode('manual'); applyBoardZoom(this.value / 100)" title="Niveau de zoom">
                         <span id="board-zoom-val">100%</span>
                         <button class="btn-zoom-step" onclick="adjustBoardZoom(0.05)" title="Zoomer (+)"><i class="fa-solid fa-plus"></i></button>
                     </div>
@@ -2692,9 +2715,9 @@
                 <div class="rack-area" id="player-rack"></div>
             </div>
             <div class="action-button-bar">
-                <button class="btn-game success" id="draw-btn" onclick="handleDrawOrPass()" title="Piocher une tuile" aria-label="Piocher une tuile"><i class="fa-solid fa-plus"></i></button>
-                <button class="btn-game primary" id="validate-btn" onclick="validatePlayerTurn()" title="Valider le tour" aria-label="Valider le tour"><i class="fa-solid fa-check"></i><span class="validate-opening-badge" id="validate-opening-badge" style="display:none;"></span></button>
-                <span id="turn-validation-badge" class="validation-status-indicator" style="display:none;" tabindex="0" role="status" aria-label="État de validation du coup"></span>
+				<button class="btn-game success" id="draw-btn" onclick="handleDrawOrPass()" title="Piocher une tuile" aria-label="Piocher une tuile"><i class="fa-solid fa-plus"></i><span class="btn-label">Piocher</span></button>
+				<button class="btn-game primary" id="validate-btn" onclick="validatePlayerTurn()" title="Valider le tour" aria-label="Valider le tour"><i class="fa-solid fa-check"></i><span class="btn-label">Valider</span><span class="validate-opening-badge" id="validate-opening-badge" style="display:none;"></span></button>
+				<span id="turn-validation-badge" class="validation-status-indicator" style="visibility:hidden;" tabindex="0" role="status" aria-label="État de validation du coup"></span>
                 <button class="btn-game danger btn-compact-icon" id="cancel-btn" onclick="resetBoardState()" title="Annuler les modifications du tour" aria-label="Annuler les modifications du tour"><i class="fa-solid fa-rotate-left"></i></button>
                 <button class="btn-game secondary btn-compact-icon" id="toggle-sort-btn" onclick="toggleHandSort()" title="Trier par couleur" aria-label="Trier par couleur"><i class="fa-solid fa-palette" id="sort-btn-icon"></i></button>
                 <button class="btn-game secondary btn-compact-icon" id="suggest-btn" onclick="handleHintButtonClick()" title="Indice" aria-label="Indice"><i class="fa-solid fa-lightbulb" id="suggest-btn-icon"></i></button>
@@ -2939,7 +2962,7 @@
             <summary><i class="fa-solid fa-table-cells-large"></i> Affichage de la table</summary>
             <div class="help-body">
                 <ul>
-                    <li>Le bouton à côté du minuteur bascule entre <i class="fa-solid fa-table-cells-large"></i> <strong>Compact</strong> (les combinaisons à la suite) et <i class="fa-solid fa-table-columns"></i> <strong>Suites / Séries</strong> (deux bandes séparées, plus une bande « En cours » pour les combinaisons incomplètes).</li>
+                    <li>Le bouton à côté du zoom, en haut de la table, bascule entre <i class="fa-solid fa-table-cells-large"></i> <strong>Compact</strong> (les combinaisons à la suite) et <i class="fa-solid fa-table-columns"></i> <strong>Suites / Séries</strong> (deux bandes séparées, plus une bande « En cours » pour les combinaisons incomplètes).</li>
                     <li><strong>Zoom</strong> : boutons − <i class="fa-solid fa-expand"></i> + en haut de la table (<i class="fa-solid fa-expand"></i> ajuste tout à l'écran) ; sur ordinateur, Ctrl + molette.</li>
                 </ul>
             </div>
@@ -3292,7 +3315,7 @@
         playerTurnStartedAt = Date.now();
         playerTurnPausedDurationTotal = 0;
         playerTurnPauseStartedAt = null;
-        showTipOnce('layout-button', "Le bouton à côté du minuteur change l'affichage du tapis.");
+        showTipOnce('layout-button-v2', "Le bouton ▦ en haut de la table, à côté du zoom, change l'affichage du tapis.");
         if (aiHand.length <= 5) showTipOnce('ai-few-tiles', `L'IA n'a plus que ${aiHand.length} tuiles (pastille 🤖 en haut).`);
     }
 
@@ -3452,8 +3475,24 @@
     let aiLastTurnReplay = null; // { boardRowsBefore, aiHandBefore, steps }
     let isReplayingAiMove = false;
     let preReplayPlayerState = null;
-    let autoFitEnabled = false;
+    let zoomMode = 'auto';
+    try {
+        const savedZoomMode = localStorage.getItem('rummikub_zoom_mode');
+        if (savedZoomMode === 'manual' || savedZoomMode === 'auto') {
+            zoomMode = savedZoomMode;
+        }
+    } catch(e) {}
+    let autoFitEnabled = (zoomMode === 'auto');
     let isFittingZoom = false;
+
+    function setZoomMode(mode) {
+        zoomMode = (mode === 'manual') ? 'manual' : 'auto';
+        autoFitEnabled = (zoomMode === 'auto');
+        try {
+            localStorage.setItem('rummikub_zoom_mode', zoomMode);
+        } catch (e) {}
+        syncSettingsControls();
+    }
 
     // R16 : Match multi-manches et sauvegarde
     let totalRounds = 2;
@@ -3509,6 +3548,7 @@
         syncSettingsControls();
         updateUI();
         notify({ text: `Disposition du tapis : ${getLayoutLabel(boardLayoutMode)}`, kind: 'info', channel: 'bubble', ttlMs: 2000, key: 'layout' });
+        scheduleAutoFit({ allowGrow: true });
     }
     function toggleBoardLayout() {
         setBoardLayoutMode(boardLayoutMode === 'flow' ? 'columns' : 'flow');
@@ -5406,12 +5446,7 @@
             try { localStorage.removeItem('rummikub_ai_style'); } catch(e){}
             try { localStorage.removeItem('rummikub_ai_speed'); } catch(e){}
             aiSpeed = 'normal';
-            const savedAutoFit = localStorage.getItem('rummikub_auto_fit');
-            if (savedAutoFit !== null) {
-                autoFitEnabled = (savedAutoFit === '1');
-            } else {
-                autoFitEnabled = false;
-            }
+            try { localStorage.removeItem('rummikub_auto_fit'); } catch(e){}
             const savedHints = localStorage.getItem('rummikub_hints_enabled');
             if (savedHints !== null) {
                 hintsEnabled = (savedHints === '1');
@@ -5526,16 +5561,13 @@
     }
     function closeHelpModal() { const o = document.getElementById('help-overlay'); if (o) o.style.display = 'none'; resumeTurnTimer(); }
     function setAutoFitSetting(enabled) {
-        autoFitEnabled = !!enabled;
-        try {
-            localStorage.setItem('rummikub_auto_fit', autoFitEnabled ? '1' : '0');
-        } catch(e){}
-        syncSettingsControls();
-    }
-    function onSettingsAutoFitChange(checked) {
-        setAutoFitSetting(checked);
-        notify({ text: checked ? "Ajustement automatique activé" : "Ajustement automatique désactivé", kind: 'info', channel: 'bubble', ttlMs: 2000, key: 'autofit' });
-    }
+		setZoomMode(enabled ? 'auto' : 'manual');
+		if (enabled) fitBoardZoom();
+	}
+	function onSettingsAutoFitChange(checked) {
+		setAutoFitSetting(checked);
+		notify({ text: checked ? "Zoom automatique activé" : "Zoom automatique désactivé", kind: 'info', channel: 'bubble', ttlMs: 2000, key: 'autofit' });
+	}
 
     function applyHintsVisibility() {
         const suggestBtn = document.getElementById('suggest-btn');
@@ -6919,8 +6951,10 @@
         return logs;
     }
 
+    const ZOOM_MIN = 0.6;
+    const ZOOM_MAX = 1.0;
     let currentBoardZoom = 1;
-    function applyBoardZoom(val) {
+    function applyBoardZoom(val, { persist = true } = {}) {
         const clamped = Math.max(0.6, Math.min(1.3, Math.round(val * 100) / 100));
         currentBoardZoom = clamped;
         const board = document.getElementById('board-container');
@@ -6929,85 +6963,125 @@
         }
         const slider = document.getElementById('board-zoom-slider');
         if (slider) slider.value = String(Math.round(clamped * 100));
+        const zoomText = (zoomMode === 'auto') ? 'Auto' : `${Math.round(clamped * 100)}%`;
         const label = document.getElementById('board-zoom-val');
-        if (label) label.textContent = `${Math.round(clamped * 100)}%`;
+        if (label) label.textContent = zoomText;
         syncSettingsControls();
-        try { localStorage.setItem('rummikub_board_zoom', String(clamped)); } catch (e) {}
+        if (persist && zoomMode === 'manual') {
+            try { localStorage.setItem('rummikub_board_zoom', String(clamped)); } catch (e) {}
+        }
+    }
+
+    function boardFits(board) {
+        if (!board) return true;
+        if (board.scrollHeight > board.clientHeight + 1) return false;
+        if (board.scrollWidth > board.clientWidth + 1) return false;
+        const rows = board.querySelectorAll('.meld-row');
+        for (const row of rows) {
+            if (row.scrollWidth > row.clientWidth + 1) return false;
+        }
+        return true;
+    }
+
+    function computeFitZoom() {
+        const board = document.getElementById('board-container');
+        if (!board) return ZOOM_MAX;
+        const savedScrollTop = board.scrollTop;
+
+        board.style.setProperty('--board-zoom', String(ZOOM_MAX));
+        if (boardFits(board)) {
+            board.scrollTop = savedScrollTop;
+            return ZOOM_MAX;
+        }
+
+        board.style.setProperty('--board-zoom', String(ZOOM_MIN));
+        if (!boardFits(board)) {
+            board.scrollTop = savedScrollTop;
+            return ZOOM_MIN;
+        }
+
+        let lo = ZOOM_MIN;
+        let hi = ZOOM_MAX;
+        for (let iter = 0; iter < 6; iter++) {
+            const mid = (lo + hi) / 2;
+            board.style.setProperty('--board-zoom', String(mid));
+            if (boardFits(board)) {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+
+        board.scrollTop = savedScrollTop;
+        return Math.floor(lo * 100) / 100;
     }
 
     async function fitBoardZoom() {
-        if (pointerState.isDragging || isAiAnimating || gameState === 'ANIMATING' || isDemoActive || isFittingZoom) {
+        if (pointerState.isDragging || isAiAnimating || gameState === 'ANIMATING' || isDemoActive) {
             return;
         }
-        isFittingZoom = true;
-        try {
-            const board = document.getElementById('board-container');
-            const meldsArea = document.getElementById('board-melds-container');
-            if (!board || !meldsArea) return;
-            const toolbar = document.getElementById('board-top-toolbar');
-            const toolbarH = toolbar ? toolbar.offsetHeight : 0;
-            const availableHeight = board.clientHeight - toolbarH;
-            if (availableHeight <= 0) return currentBoardZoom;
+        const z = computeFitZoom();
+        applyBoardZoom(z, { persist: false });
+        return z;
+    }
 
-            // Itération 1 : vérification du zoom 1.0
-            applyBoardZoom(1.0);
-            await new Promise(r => requestAnimationFrame(r));
-            if (meldsArea.scrollHeight <= availableHeight) {
-                return currentBoardZoom;
-            }
+    let autoFitPending = false;
+    let autoFitDeferred = false;
+    let autoFitGrowRequested = false;
 
-            // Itération 2 : vérification du zoom 0.75
-            applyBoardZoom(0.75);
-            await new Promise(r => requestAnimationFrame(r));
-            if (meldsArea.scrollHeight > availableHeight) {
-                notify({ text: "Plateau très rempli : faites défiler", kind: 'info', channel: 'bubble', ttlMs: 2000, key: 'zoom-fit' });
-                return currentBoardZoom;
-            }
+	function scheduleAutoFit({ allowGrow = false } = {}) {
+		if (zoomMode !== 'auto') return;
+		if (allowGrow) autoFitGrowRequested = true;
+		if (autoFitPending) return;
+		autoFitPending = true;
+		requestAnimationFrame(() => {
+			autoFitPending = false;
+			if (pointerState.isDragging || isAiAnimating || isDemoAnimating || gameState === 'ANIMATING') {
+				autoFitDeferred = true;
+				return;
+			}
+			const canGrow = autoFitGrowRequested || gameState !== 'PLAYER_TURN';
+			autoFitGrowRequested = false;
+			const z = computeFitZoom();
+			if (z < currentBoardZoom || (canGrow && z - currentBoardZoom >= 0.02)) {
+				applyBoardZoom(z, { persist: false });
+			} else {
+				const board = document.getElementById('board-container');
+				if (board) board.style.setProperty('--board-zoom', String(currentBoardZoom));
+			}
+		});
+	}
 
-            // Recherche dichotomique : 0.75 rentre, 1.0 ne rentre pas
-            let low = 0.75;
-            let high = 1.0;
-            let best = 0.75;
-
-            for (let iter = 0; iter < 4; iter++) {
-                const mid = Math.round(((low + high) / 2) * 100) / 100;
-                if (mid === low || mid === high) break;
-                applyBoardZoom(mid);
-                await new Promise(r => requestAnimationFrame(r));
-                if (meldsArea.scrollHeight <= availableHeight) {
-                    best = mid;
-                    low = mid;
-                } else {
-                    high = mid;
-                }
-            }
-
-            if (currentBoardZoom !== best) {
-                applyBoardZoom(best);
-                await new Promise(r => requestAnimationFrame(r));
-            }
-            return currentBoardZoom;
-        } finally {
-            isFittingZoom = false;
+    function flushDeferredAutoFit() {
+        if (autoFitDeferred) {
+            autoFitDeferred = false;
+            scheduleAutoFit();
         }
     }
 
     function adjustBoardZoom(delta) {
+        setZoomMode('manual');
         applyBoardZoom(currentBoardZoom + delta);
     }
 
     function loadBoardZoom() {
         try {
+            const savedMode = localStorage.getItem('rummikub_zoom_mode');
+            if (savedMode === 'manual' || savedMode === 'auto') {
+                setZoomMode(savedMode);
+            } else {
+                setZoomMode('auto');
+            }
             const saved = localStorage.getItem('rummikub_board_zoom');
             if (saved !== null) {
                 const parsed = parseFloat(saved);
                 if (!isNaN(parsed)) {
-                    applyBoardZoom(parsed);
+                    applyBoardZoom(parsed, { persist: false });
                     return;
                 }
             }
         } catch (e) {}
-        applyBoardZoom(1);
+        applyBoardZoom(1, { persist: false });
     }
 
     function handleLastAiMoveClick() {
@@ -7277,6 +7351,7 @@
             resumeTurnTimer();
         }
         updateUI(true);
+        flushDeferredAutoFit();
     }
 
     function getAiStepDurationMs() {
@@ -7775,6 +7850,7 @@
 
         isDemoAnimating = false;
         updateDemoPanelUI();
+        flushDeferredAutoFit();
     }
 
     function handleDemoPrev() {
@@ -7807,6 +7883,7 @@
             if (prevRowEl) prevRowEl.classList.add('demo-highlight-dest');
         }
         updateDemoPanelUI();
+        flushDeferredAutoFit();
     }
 
     function handleDemoKeep() {
@@ -7820,6 +7897,7 @@
         resumeTurnTimer();
         updateUI();
         notify({ text: "Coup appliqué. Vous pouvez encore ajuster puis valider.", kind: 'info', channel: 'bubble', ttlMs: 2000, key: 'hints' });
+        flushDeferredAutoFit();
     }
 
     function handleDemoCancel() {
@@ -7837,6 +7915,7 @@
         resumeTurnTimer();
         updateUI();
         notify({ text: "Démonstration annulée : plateau restauré.", kind: 'info', channel: 'bubble', ttlMs: 2000, key: 'hints' });
+        flushDeferredAutoFit();
     }
 
     function onDemoKeyDown(e) {
@@ -10034,6 +10113,7 @@
             updateUI();
         }
         updateRackHeight();
+        flushDeferredAutoFit();
     }
 
     function createPointerGhost(tile, x, y) {
@@ -10084,6 +10164,7 @@
             updateUI();
             updateRackHeight();
         }
+        flushDeferredAutoFit();
     }
 
     function onWindowPointerCancel(e) {
@@ -10566,7 +10647,7 @@
             if (sortToggleBtn) sortToggleBtn.disabled = true;
             if (suggestBtn) suggestBtn.disabled = true;
             const validationBadge = document.getElementById('turn-validation-badge');
-            if (validationBadge) validationBadge.style.display = 'none';
+            if (validationBadge) validationBadge.style.visibility = 'hidden';
             return;
         }
 
@@ -10577,12 +10658,12 @@
         const validationBadge = document.getElementById('turn-validation-badge');
         if (validationBadge) {
             if (!isPlayerTurn || (placedCount === 0 && !boardModified)) {
-                validationBadge.style.display = 'none';
+                validationBadge.style.visibility = 'hidden';
                 validationBadge.className = 'validation-status-indicator';
                 validationBadge.title = '';
                 validationBadge.innerHTML = '';
             } else if (liveValidation.valid) {
-                validationBadge.style.display = 'inline-flex';
+                validationBadge.style.visibility = 'visible';
                 validationBadge.className = 'validation-status-indicator valid';
                 validationBadge.title = 'Coup valide : il sera validé automatiquement à 0 s';
                 validationBadge.innerHTML = '<i class="fa-solid fa-check"></i>';
@@ -10590,7 +10671,7 @@
                 const firstErrMsg = (liveValidation.errors && liveValidation.errors[0])
                     ? liveValidation.errors[0].message
                     : 'Coup invalide';
-                validationBadge.style.display = 'inline-flex';
+                validationBadge.style.visibility = 'visible';
                 validationBadge.className = 'validation-status-indicator invalid';
                 validationBadge.title = firstErrMsg;
                 validationBadge.innerHTML = '<i class="fa-solid fa-xmark"></i>';
@@ -10600,7 +10681,9 @@
         if (drawBtn) {
             drawBtn.disabled = !isPlayerTurn;
             const isPoolEmpty = (pool.length === 0);
-            drawBtn.innerHTML = isPoolEmpty ? '<i class="fa-solid fa-forward"></i>' : '<i class="fa-solid fa-plus"></i>';
+			drawBtn.innerHTML = isPoolEmpty
+				? '<i class="fa-solid fa-forward"></i><span class="btn-label">Passer</span>'
+				: '<i class="fa-solid fa-plus"></i><span class="btn-label">Piocher</span>';
             const drawLabel = isPoolEmpty ? 'Passer (pioche vide)' : 'Piocher une tuile';
             drawBtn.title = drawLabel;
             drawBtn.setAttribute('aria-label', drawLabel);
@@ -10632,7 +10715,7 @@
                 const badgeClass = isValidScore ? 'badge-valid' : 'badge-invalid';
                 badgeHtml = `<span class="validate-opening-badge ${badgeClass}" id="validate-opening-badge">${liveValidation.openingScore}/30</span>`;
             }
-            validateBtn.innerHTML = `<i class="fa-solid fa-check"></i>${badgeHtml}`;
+            validateBtn.innerHTML = `<i class="fa-solid fa-check"></i><span class="btn-label">Valider</span>${badgeHtml}`;
         }
         if (cancelBtn) {
             cancelBtn.disabled = !isPlayerTurn || (placedCount === 0 && !boardModified);
@@ -11185,6 +11268,7 @@
         updateTopNavbar();
         syncSettingsControls();
         updateMultiSelectChip();
+        scheduleAutoFit();
     }
 
 
@@ -11312,9 +11396,9 @@
                                 </label>
                             </div>
 
-                            <div style="display:flex; justify-content:space-between; align-items:center; min-height:36px; cursor:pointer;" title="Ajuster au début de mon tour">
-                                <label title="Ajuster au début de mon tour"><span>Ajuster au début de mon tour</span></label>
-                                <label class="toggle-switch toggle-sm" style="min-width:36px; min-height:36px; width:36px; height:36px;" title="Ajuster au début de mon tour">
+                            <div style="display:flex; justify-content:space-between; align-items:center; min-height:36px; cursor:pointer;" title="Adapte la taille des tuiles pour que toute la table tienne à l'écran">
+                                <label title="Adapte la taille des tuiles pour que toute la table tienne à l'écran"><span>Zoom automatique</span></label>
+                                <label class="toggle-switch toggle-sm" style="min-width:36px; min-height:36px; width:36px; height:36px;" title="Adapte la taille des tuiles pour que toute la table tienne à l'écran">
                                     <input type="checkbox" class="setting-autofit-chk" onchange="onSettingsAutoFitChange(this.checked)">
                                     <span class="toggle-slider" style="width:36px; height:20px;"></span>
                                 </label>
@@ -11557,7 +11641,7 @@
     }
     function syncSettingsControls() {
         const isCb = document.body.classList.contains('colorblind-mode');
-        const zoomPct = `${Math.round(currentBoardZoom * 100)}%`;
+        const zoomPct = (zoomMode === 'auto') ? 'Auto' : `${Math.round(currentBoardZoom * 100)}%`;
 
         document.querySelectorAll('input[name="welcome-ai"], input[name="setting-ai"]').forEach(el => {
             el.checked = (el.value === aiProfile);
@@ -11599,6 +11683,8 @@
         if (slider) slider.value = String(Math.round(currentBoardZoom * 100));
         const zoomVal = document.getElementById('board-zoom-val');
         if (zoomVal) zoomVal.textContent = zoomPct;
+		const fitBtn = document.getElementById('btn-zoom-fit');
+		if (fitBtn) fitBtn.classList.toggle('active', zoomMode === 'auto');
         const hl = document.getElementById('welcome-help-link'); if (hl) hl.style.outline = localStorage.getItem('rummikub_help_seen') ? 'none' : '2px solid var(--accent-gold)';
 
         const aiDesc = getAiLevelDescription(aiProfile);
@@ -11971,7 +12057,10 @@
 
         const savedBoardLayoutMode = boardLayoutMode;
         const savedBoardZoom = currentBoardZoom;
+        const savedZoomMode = zoomMode;
         const savedTimerEnabled = timerEnabled;
+        const savedAutoFitPending = autoFitPending;
+        const savedAutoFitDeferred = autoFitDeferred;
         const savedHintsEnabled = hintsEnabled;
         const savedAiProfile = aiProfile;
         const savedAiSpeed = aiSpeed;
@@ -13187,6 +13276,7 @@
         });
 
         await runTestCase("Zoom du plateau : applyBoardZoom borne entre 60% et 130% et persiste dans localStorage", () => {
+            setZoomMode('manual');
             applyBoardZoom(0.5);
             assert(currentBoardZoom === 0.6, `Attendu 0.6, obtenu ${currentBoardZoom}`);
             applyBoardZoom(1.5);
@@ -14860,6 +14950,112 @@
             }
         });
 
+        await runTestCase("7.8 Débordement horizontal : à 360 × 400 px avec 12 combinaisons, board-container ne déborde pas", () => {
+            const board = document.getElementById('board-container');
+            if (!board) return "DOM non disponible";
+            const savedBoard = cloneRows(boardRows);
+            const savedW = board.style.width;
+            const savedH = board.style.height;
+            const savedMaxH = board.style.maxHeight;
+            const wasNarrow = board.classList.contains('board-narrow');
+            try {
+                tileAssertSilenced = true;
+                const rows = [];
+                for (let r = 0; r < 12; r++) {
+                    rows.push({
+                        id: 8700 + r,
+                        type: r % 2 === 0 ? 'run' : 'group',
+                        tiles: [
+                            { id: 87000 + r * 3 + 1, value: 4, color: 'blue', isJoker: false },
+                            { id: 87000 + r * 3 + 2, value: 5, color: r % 2 === 0 ? 'blue' : 'red', isJoker: false },
+                            { id: 87000 + r * 3 + 3, value: 6, color: r % 2 === 0 ? 'blue' : 'yellow', isJoker: false }
+                        ]
+                    });
+                }
+                boardRows = rows;
+                board.style.width = '360px';
+                board.style.height = '400px';
+                board.style.maxHeight = '400px';
+                board.classList.add('board-narrow');
+                updateUI();
+
+                assert(board.scrollWidth <= board.clientWidth + 1, `board-container déborde horizontalement : scrollWidth=${board.scrollWidth} > clientWidth=${board.clientWidth}`);
+                return `scrollWidth (${board.scrollWidth}px) <= clientWidth (${board.clientWidth}px) + 1`;
+            } finally {
+                board.style.width = savedW;
+                board.style.height = savedH;
+                board.style.maxHeight = savedMaxH;
+                board.classList.toggle('board-narrow', wasNarrow);
+                boardRows = savedBoard;
+                tileAssertSilenced = false;
+                updateUI();
+            }
+        });
+
+        await runTestCase("7.9 Non-chevauchement colonnes : aucune .meld-row ne chevauche un .board-col-header", () => {
+            const board = document.getElementById('board-container');
+            if (!board) return "DOM non disponible";
+            const savedBoard = cloneRows(boardRows);
+            const savedLayout = boardLayoutMode;
+            const savedW = board.style.width;
+            const wasNarrow = board.classList.contains('board-narrow');
+            try {
+                tileAssertSilenced = true;
+                setBoardLayoutMode('columns');
+                const rows = [];
+                for (let r = 0; r < 8; r++) {
+                    rows.push({
+                        id: 8800 + r,
+                        type: 'run',
+                        tiles: [
+                            { id: 88000 + r * 3 + 1, value: 1, color: 'red', isJoker: false },
+                            { id: 88000 + r * 3 + 2, value: 2, color: 'red', isJoker: false },
+                            { id: 88000 + r * 3 + 3, value: 3, color: 'red', isJoker: false }
+                        ]
+                    });
+                }
+                for (let r = 0; r < 4; r++) {
+                    rows.push({
+                        id: 8900 + r,
+                        type: 'group',
+                        tiles: [
+                            { id: 89000 + r * 3 + 1, value: 8, color: 'blue', isJoker: false },
+                            { id: 89000 + r * 3 + 2, value: 8, color: 'yellow', isJoker: false },
+                            { id: 89000 + r * 3 + 3, value: 8, color: 'black', isJoker: false }
+                        ]
+                    });
+                }
+                boardRows = rows;
+                board.style.width = '360px';
+                board.classList.add('board-narrow');
+                updateUI();
+
+                const headers = Array.from(board.querySelectorAll('.board-col-header'));
+                const meldRows = Array.from(board.querySelectorAll('.meld-row'));
+                assert(headers.length >= 2, "Au moins 2 en-têtes attendus");
+                assert(meldRows.length === 12, `12 rangées attendues, obtenu ${meldRows.length}`);
+
+                for (const h of headers) {
+                    const hRect = h.getBoundingClientRect();
+                    if (hRect.width === 0 || hRect.height === 0) continue;
+                    for (const m of meldRows) {
+                        const mRect = m.getBoundingClientRect();
+                        if (mRect.width === 0 || mRect.height === 0) continue;
+                        const overlaps = !(hRect.right <= mRect.left || hRect.left >= mRect.right || hRect.bottom <= mRect.top || hRect.top >= mRect.bottom);
+                        assert(!overlaps, `Chevauchement détecté entre l'en-tête "${h.textContent.trim()}" et la rangée ${m.getAttribute('data-row-id')}`);
+                    }
+                }
+                return `Aucun chevauchement entre les ${headers.length} en-têtes et les ${meldRows.length} rangées`;
+            } finally {
+                board.style.width = savedW;
+                board.classList.toggle('board-narrow', wasNarrow);
+                boardRows = savedBoard;
+                setBoardLayoutMode(savedLayout);
+                tileAssertSilenced = false;
+                updateUI();
+            }
+        });
+
         await runTestCase("Multi-sélection chip, astuces onShown / tip-bubble et déplacement bouton", () => {
             const savedState = gameState, savedHand = playerHand.map(cloneTile), savedHints = hintsEnabled, savedSeen = localStorage.getItem('rummikub_tips_seen');
             try {
@@ -15951,12 +16147,11 @@
             return `${pairs.length} paires de texte vérifiées en thème sombre : toutes ont un ratio >= 4.5:1`;
         });
 
-        await runTestCase("Bouton #btn-layout-toggle : voisin immédiat de #timer-container, bascule flow ↔ columns, icône, aria-label et localStorage", () => {
-            const timerContainer = document.getElementById('timer-container');
+        await runTestCase("Bouton #btn-layout-toggle : dans la barre du tapis avant le zoom, bascule flow ↔ columns, icône, aria-label et localStorage", () => {
             const btn = document.getElementById('btn-layout-toggle');
-            assert(timerContainer !== null, "#timer-container doit exister");
-            assert(btn !== null, "#btn-layout-toggle doit exister");
-            assert(timerContainer.nextElementSibling === btn, "#btn-layout-toggle doit être le voisin immédiat de #timer-container");
+			assert(btn !== null, "#btn-layout-toggle doit exister");
+			assert(btn.closest('.board-tools-right') !== null, "#btn-layout-toggle doit être dans la barre d'outils du tapis");
+			assert(btn.nextElementSibling && btn.nextElementSibling.classList.contains('board-zoom-control'), "#btn-layout-toggle doit précéder le contrôle de zoom");
 
             const savedMode = boardLayoutMode;
             const savedStorage = localStorage.getItem('rummikub_board_layout');
@@ -16354,7 +16549,7 @@
             }
         });
 
-        await runTestCase("Ajustement zoom : avec 12 rangées sur un plateau forcé à 300px, fitBoardZoom() donne un zoom dans [0.75, 1.0] et scrollHeight <= hauteur disponible ou zoom === 0.75", async () => {
+        await runTestCase("Ajustement zoom : avec 12 rangées sur un plateau forcé à 300px, fitBoardZoom() donne un zoom dans [0.6, 1.0] et scrollHeight <= hauteur disponible ou zoom === 0.6", async () => {
             const board = document.getElementById('board-container');
             const meldsArea = document.getElementById('board-melds-container');
             const toolbar = document.getElementById('board-top-toolbar');
@@ -16390,8 +16585,8 @@
                 const toolbarH = toolbar ? toolbar.offsetHeight : 0;
                 const availableHeight = board.clientHeight - toolbarH;
 
-                assert(z >= 0.75 && z <= 1.0, `Zoom attendu dans [0.75, 1.0], obtenu ${z}`);
-                assert(meldsArea.scrollHeight <= availableHeight || z === 0.75, `scrollHeight (${meldsArea.scrollHeight}) doit être <= availableHeight (${availableHeight}) ou zoom === 0.75 (obtenu: ${z})`);
+                assert(z >= 0.6 && z <= 1.0, `Zoom attendu dans [0.6, 1.0], obtenu ${z}`);
+                assert(meldsArea.scrollHeight <= availableHeight || z === 0.6, `scrollHeight (${meldsArea.scrollHeight}) doit être <= availableHeight (${availableHeight}) ou zoom === 0.6 (obtenu: ${z})`);
 
                 return `Zoom ajusté à ${z} (scrollHeight: ${meldsArea.scrollHeight}px, dispo: ${availableHeight}px)`;
             } finally {
@@ -16432,6 +16627,83 @@
             }
         });
 
+        await runTestCase("Mode de zoom : bascule auto / manuel, persistance et affichage 'Auto'", () => {
+            const savedMode = zoomMode;
+            try {
+                setZoomMode('auto');
+                assert(zoomMode === 'auto', "zoomMode doit être 'auto'");
+                assert(autoFitEnabled === true, "autoFitEnabled doit être true quand zoomMode === 'auto'");
+                assert(localStorage.getItem('rummikub_zoom_mode') === 'auto', "localStorage doit contenir 'auto'");
+
+                applyBoardZoom(1.2, { persist: true });
+                assert(currentBoardZoom === 1.2, "Le zoom doit être appliqué");
+                const valEl = document.getElementById('board-zoom-val');
+                assert(valEl && valEl.textContent === 'Auto', `L'affichage doit être 'Auto' en mode auto, obtenu '${valEl?.textContent}'`);
+
+                adjustBoardZoom(-0.05);
+                assert(zoomMode === 'manual', "adjustBoardZoom doit basculer en 'manual'");
+                assert(autoFitEnabled === false, "autoFitEnabled doit être false en mode manual");
+                assert(localStorage.getItem('rummikub_zoom_mode') === 'manual', "localStorage doit contenir 'manual'");
+                assert(valEl && valEl.textContent !== 'Auto', "L'affichage doit être le pourcentage en mode manual");
+
+                const slider = document.getElementById('board-zoom-slider');
+                if (slider) {
+                    setZoomMode('auto');
+                    slider.value = "110";
+                    slider.dispatchEvent(new Event('input'));
+                    assert(zoomMode === 'manual', "Le slider doit basculer zoomMode à 'manual'");
+                }
+
+                const fitBtn = document.getElementById('btn-zoom-fit');
+                if (fitBtn) {
+                    fitBtn.click();
+                    assert(zoomMode === 'auto', "Le bouton fit doit basculer zoomMode à 'auto'");
+                }
+
+                return "zoomMode bascule auto/manuel, autoFitEnabled synchronisé, affichage 'Auto' et persistance conformes";
+            } finally {
+                setZoomMode(savedMode);
+            }
+        });
+
+        await runTestCase("Déclenchement automatique du zoom : scheduleAutoFit, autoFitPending, autoFitDeferred et flushDeferredAutoFit", async () => {
+            const savedMode = zoomMode;
+            const savedPending = autoFitPending;
+            const savedDeferred = autoFitDeferred;
+            try {
+                setZoomMode('manual');
+                scheduleAutoFit();
+                assert(autoFitPending === false, "scheduleAutoFit ne doit rien planifier en mode manual");
+
+                setZoomMode('auto');
+                scheduleAutoFit();
+                assert(autoFitPending === true, "autoFitPending doit passer à true");
+                scheduleAutoFit();
+                assert(autoFitPending === true, "autoFitPending reste true");
+
+                await new Promise(r => requestAnimationFrame(r));
+                assert(autoFitPending === false, "autoFitPending doit repasser à false après le rAF");
+
+                pointerState.isDragging = true;
+                scheduleAutoFit();
+                await new Promise(r => requestAnimationFrame(r));
+                pointerState.isDragging = false;
+                assert(autoFitDeferred === true, "autoFitDeferred doit être true si un drag était en cours");
+
+                flushDeferredAutoFit();
+                assert(autoFitDeferred === false, "autoFitDeferred doit être remis à false par flushDeferredAutoFit");
+                assert(autoFitPending === true, "scheduleAutoFit doit avoir été rappelé par flushDeferredAutoFit");
+                await new Promise(r => requestAnimationFrame(r));
+                assert(autoFitPending === false, "autoFitPending doit être false après exécution");
+
+                return "scheduleAutoFit filtre selon zoomMode, gère l'état pending, diffère pendant le drag et se vide via flushDeferredAutoFit";
+            } finally {
+                setZoomMode(savedMode);
+                autoFitPending = savedPending;
+                autoFitDeferred = savedDeferred;
+            }
+        });
+
         await runTestCase("Ajustement zoom : fitBoardZoom() ne fait rien si pointerState.isDragging ou isAiAnimating est vrai", async () => {
             const savedZoom = currentBoardZoom;
             applyBoardZoom(0.80);
@@ -16452,32 +16724,185 @@
             return "fitBoardZoom() inerte pendant le drag et l'animation IA";
         });
 
-        await runTestCase("Ajustement zoom : le paramètre d'ajustement auto est désactivé par défaut et sa clé est restaurée", () => {
-            const savedVal = localStorage.getItem('rummikub_auto_fit');
+        await runTestCase("Zoom automatique : réglage synchronisé avec zoomMode, sans clé rummikub_auto_fit", () => {
+			const savedMode = zoomMode;
+			try {
+				setAutoFitSetting(false);
+				assert(zoomMode === 'manual' && autoFitEnabled === false, "Désactivé : zoomMode 'manual' attendu");
+				setAutoFitSetting(true);
+				assert(zoomMode === 'auto' && autoFitEnabled === true, "Activé : zoomMode 'auto' attendu");
+				assert(localStorage.getItem('rummikub_zoom_mode') === 'auto', "rummikub_zoom_mode doit valoir 'auto'");
+				assert(localStorage.getItem('rummikub_auto_fit') === null, "L'ancienne clé rummikub_auto_fit ne doit plus être écrite");
+				renderAnalyticsData();
+				const row = document.querySelector('.card-settings .setting-autofit-chk')?.closest('div');
+				assert(row && row.textContent.includes('Zoom automatique'), "Le libellé doit être « Zoom automatique »");
+				return "Réglage « Zoom automatique » synchronisé avec zoomMode, ancienne clé supprimée";
+			} finally {
+				setZoomMode(savedMode);
+			}
+		});
+
+        await runTestCase("Zoom : le bouton + passe zoomMode à 'manual' et persiste dans localStorage", () => {
+            const savedMode = zoomMode;
+            const savedZoom = currentBoardZoom;
+            const savedStorageZoom = localStorage.getItem('rummikub_board_zoom');
+            const savedStorageMode = localStorage.getItem('rummikub_zoom_mode');
             try {
-                localStorage.removeItem('rummikub_auto_fit');
-                autoFitEnabled = false;
-                loadMatchSettings();
-                assert(autoFitEnabled === false, "autoFitEnabled doit être false par défaut");
+                setZoomMode('auto');
+                const plusBtn = document.querySelector('.board-zoom-control button[title="Zoomer (+)"]');
+                assert(plusBtn !== null, "Le bouton + (.board-zoom-control button[title='Zoomer (+)']) doit exister");
+                plusBtn.click();
 
-                setAutoFitSetting(true);
-                assert(autoFitEnabled === true, "autoFitEnabled doit passer à true");
-                assert(localStorage.getItem('rummikub_auto_fit') === '1', "localStorage doit valoir '1'");
-
-                setAutoFitSetting(false);
-                assert(autoFitEnabled === false, "autoFitEnabled doit repasser à false");
-                assert(localStorage.getItem('rummikub_auto_fit') === '0', "localStorage doit valoir '0'");
-
-                return "Paramètre auto-fit OFF par défaut et persistance vérifiée";
+                assert(zoomMode === 'manual', `zoomMode attendu 'manual', obtenu '${zoomMode}'`);
+                assert(localStorage.getItem('rummikub_zoom_mode') === 'manual', "localStorage 'rummikub_zoom_mode' attendu 'manual'");
+                assert(localStorage.getItem('rummikub_board_zoom') === String(currentBoardZoom), `localStorage 'rummikub_board_zoom' attendu '${currentBoardZoom}', obtenu '${localStorage.getItem('rummikub_board_zoom')}'`);
+                return "Bouton + : bascule à 'manual' et enregistre le zoom dans localStorage";
             } finally {
-                if (savedVal !== null) {
-                    localStorage.setItem('rummikub_auto_fit', savedVal);
-                    autoFitEnabled = (savedVal === '1');
-                } else {
-                    localStorage.removeItem('rummikub_auto_fit');
-                    autoFitEnabled = false;
+                setZoomMode(savedMode);
+                applyBoardZoom(savedZoom, { persist: false });
+                if (savedStorageZoom !== null) localStorage.setItem('rummikub_board_zoom', savedStorageZoom);
+                else localStorage.removeItem('rummikub_board_zoom');
+                if (savedStorageMode !== null) localStorage.setItem('rummikub_zoom_mode', savedStorageMode);
+                else localStorage.removeItem('rummikub_zoom_mode');
+            }
+        });
+
+        await runTestCase("Zoom : le bouton ⤢ repasse zoomMode à 'auto' et enregistre 'auto' dans localStorage", () => {
+            const savedMode = zoomMode;
+            const savedZoom = currentBoardZoom;
+            const savedStorageMode = localStorage.getItem('rummikub_zoom_mode');
+            try {
+                setZoomMode('manual');
+                assert(zoomMode === 'manual', "zoomMode doit être initialisé à 'manual'");
+                const fitBtn = document.getElementById('btn-zoom-fit');
+                assert(fitBtn !== null, "Le bouton ⤢ (#btn-zoom-fit) doit exister");
+                fitBtn.click();
+
+                assert(zoomMode === 'auto', `zoomMode attendu 'auto', obtenu '${zoomMode}'`);
+                assert(localStorage.getItem('rummikub_zoom_mode') === 'auto', `localStorage 'rummikub_zoom_mode' attendu 'auto', obtenu '${localStorage.getItem('rummikub_zoom_mode')}'`);
+                return "Bouton ⤢ : bascule à 'auto' et persiste 'auto' dans localStorage";
+            } finally {
+                setZoomMode(savedMode);
+                applyBoardZoom(savedZoom, { persist: false });
+                if (savedStorageMode !== null) localStorage.setItem('rummikub_zoom_mode', savedStorageMode);
+                else localStorage.removeItem('rummikub_zoom_mode');
+            }
+        });
+
+        await runTestCase("Zoom : en mode auto, applyBoardZoom avec persist: false ne modifie pas le zoom dans localStorage", () => {
+            const savedMode = zoomMode;
+            const savedZoom = currentBoardZoom;
+            const savedStorageZoom = localStorage.getItem('rummikub_board_zoom');
+            const savedStorageMode = localStorage.getItem('rummikub_zoom_mode');
+            try {
+                setZoomMode('auto');
+                localStorage.setItem('rummikub_board_zoom', '1');
+                applyBoardZoom(0.8, { persist: false });
+
+                assert(currentBoardZoom === 0.8, `currentBoardZoom attendu 0.8, obtenu ${currentBoardZoom}`);
+                assert(localStorage.getItem('rummikub_board_zoom') === '1', `localStorage attendu inchangé à '1', obtenu '${localStorage.getItem('rummikub_board_zoom')}'`);
+                return "applyBoardZoom avec persist: false ne modifie pas le zoom dans localStorage en mode auto";
+            } finally {
+                setZoomMode(savedMode);
+                applyBoardZoom(savedZoom, { persist: false });
+                if (savedStorageZoom !== null) localStorage.setItem('rummikub_board_zoom', savedStorageZoom);
+                else localStorage.removeItem('rummikub_board_zoom');
+                if (savedStorageMode !== null) localStorage.setItem('rummikub_zoom_mode', savedStorageMode);
+                else localStorage.removeItem('rummikub_zoom_mode');
+            }
+        });
+
+        await runTestCase("Zoom : avec pointerState.isDragging = true, scheduleAutoFit ne change pas le zoom et met autoFitDeferred à true", async () => {
+            const savedMode = zoomMode;
+            const savedZoom = currentBoardZoom;
+            const savedDragging = pointerState.isDragging;
+            const savedDeferred = autoFitDeferred;
+            const savedPending = autoFitPending;
+            try {
+                setZoomMode('auto');
+                applyBoardZoom(1.0, { persist: false });
+                pointerState.isDragging = true;
+                autoFitDeferred = false;
+                autoFitPending = false;
+
+                scheduleAutoFit();
+                await new Promise(r => requestAnimationFrame(r));
+
+                assert(currentBoardZoom === 1.0, `currentBoardZoom ne doit pas changer (attendu 1.0, obtenu ${currentBoardZoom})`);
+                assert(autoFitDeferred === true, "autoFitDeferred doit valoir true après scheduleAutoFit pendant le drag");
+                return "Zoom inchangé à 1.0 et autoFitDeferred passé à true après rAF";
+            } finally {
+                pointerState.isDragging = savedDragging;
+                autoFitDeferred = savedDeferred;
+                autoFitPending = savedPending;
+                setZoomMode(savedMode);
+                applyBoardZoom(savedZoom, { persist: false });
+            }
+        });
+
+        await runTestCase("Zoom : avec 12 combinaisons et plateau à 360 × 400 px, computeFitZoom < 1 et boardFits ou zoom 0.6", () => {
+            const board = document.getElementById('board-container');
+            assert(board !== null, "#board-container doit exister");
+            const savedBoard = cloneRows(boardRows);
+            const savedW = board.style.width;
+            const savedH = board.style.height;
+            const savedMaxH = board.style.maxHeight;
+            const savedZoom = currentBoardZoom;
+            const savedMode = zoomMode;
+            try {
+                tileAssertSilenced = true;
+                const rows = [];
+                for (let r = 0; r < 12; r++) {
+                    rows.push({
+                        id: 8750 + r,
+                        type: r % 2 === 0 ? 'run' : 'group',
+                        tiles: [
+                            { id: 87500 + r * 3 + 1, value: 4, color: 'blue', isJoker: false },
+                            { id: 87500 + r * 3 + 2, value: 5, color: r % 2 === 0 ? 'blue' : 'red', isJoker: false },
+                            { id: 87500 + r * 3 + 3, value: 6, color: r % 2 === 0 ? 'blue' : 'yellow', isJoker: false }
+                        ]
+                    });
                 }
-                syncSettingsControls();
+                boardRows = rows;
+                board.style.width = '360px';
+                board.style.height = '400px';
+                board.style.maxHeight = '400px';
+                updateUI();
+
+                const fitZ = computeFitZoom();
+                assert(fitZ < 1, `computeFitZoom attendu < 1, obtenu ${fitZ}`);
+                applyBoardZoom(fitZ, { persist: false });
+                assert(boardFits(board) === true || fitZ === 0.6, `boardFits(board) attendu true ou fitZ === 0.6, obtenu fits=${boardFits(board)}, fitZ=${fitZ}`);
+                return `computeFitZoom = ${fitZ} (< 1) et boardFits === ${boardFits(board)}`;
+            } finally {
+                board.style.width = savedW;
+                board.style.height = savedH;
+                board.style.maxHeight = savedMaxH;
+                boardRows = savedBoard;
+                setZoomMode(savedMode);
+                applyBoardZoom(savedZoom, { persist: false });
+                tileAssertSilenced = false;
+                updateUI();
+            }
+        });
+
+        await runTestCase("Zoom : l'affichage de la valeur #board-zoom-val indique 'Auto' en mode auto", () => {
+            const savedMode = zoomMode;
+            const savedZoom = currentBoardZoom;
+            try {
+                setZoomMode('auto');
+                applyBoardZoom(0.85, { persist: false });
+                const valEl = document.getElementById('board-zoom-val');
+                assert(valEl !== null, "#board-zoom-val doit exister");
+                assert(valEl.textContent === 'Auto', `En mode auto, #board-zoom-val attendu 'Auto', obtenu '${valEl.textContent}'`);
+
+                setZoomMode('manual');
+                applyBoardZoom(0.85, { persist: false });
+                assert(valEl.textContent === '85%', `En mode manual, #board-zoom-val attendu '85%', obtenu '${valEl.textContent}'`);
+                return "#board-zoom-val affiche 'Auto' en mode auto et '85%' en mode manual";
+            } finally {
+                setZoomMode(savedMode);
+                applyBoardZoom(savedZoom, { persist: false });
             }
         });
 
@@ -17948,6 +18373,7 @@
         } finally {
             setBoardLayoutMode(savedBoardLayoutMode);
             applyBoardZoom(savedBoardZoom);
+            setZoomMode(savedZoomMode);
 
             timerEnabled = savedTimerEnabled;
             autoFitEnabled = savedAutoFitEnabled;
@@ -18190,6 +18616,7 @@
                     const width = entry.contentRect ? entry.contentRect.width : board.clientWidth;
                     board.classList.toggle('board-narrow', width < 720);
                 }
+                scheduleAutoFit({ allowGrow: true });
             });
             boardResizeObserver.observe(board);
         }
@@ -18271,6 +18698,7 @@
             gameState = 'SETUP';
             openSettingsModal();
         }
+        scheduleAutoFit();
     }
 </script>
 <script>
