@@ -1513,9 +1513,7 @@
             transform: rotate(180deg);
         }
         @media (min-width: 1101px) {
-            #btn-nav-colorblind,
             #btn-nav-drawer,
-            .nav-btn-cb,
             .nav-btn-menu {
                 display: none !important;
             }
@@ -2953,7 +2951,7 @@
                 <ul>
                     <li><strong>Sur ordinateur</strong> (écran large) : le panneau <strong>« Analyse »</strong>, à droite, affiche la carte <strong>Partie</strong> (tuiles de chacun, courbe de la partie, pioche, vos points en main), la carte <strong>« Tuiles déjà sorties »</strong> (pour chaque tuile : sur la table, dans votre main ou encore inconnue, plus les jokers), le score du <strong>Match</strong> et les <strong>Réglages</strong>. Le bouton ⇤ le replie, le bouton ? affiche la légende.</li>
                     <li><strong>Sur téléphone et tablette</strong> : touchez <i class="fa-solid fa-bars"></i> en haut à droite pour ouvrir <strong>« Menu &amp; Infos »</strong> : vous y trouvez les mêmes informations et les mêmes réglages.</li>
-                    <li><strong>Dans Réglages</strong> : niveau de l'IA (Facile, Normal, Expert), minuteur, aides (bouton Indice), ajustement automatique du zoom, mode daltonien, affichage, zoom, historique, nouveau match et « Réafficher les astuces ».</li>
+                    <li><strong>Dans Réglages</strong> : niveau de l'IA (Facile, Normal, Expert), minuteur, aides (bouton Indice), zoom automatique, mode daltonien, affichage, zoom, historique, nouveau match et « Réafficher les astuces ».</li>
                 </ul>
             </div>
         </details>
@@ -2963,7 +2961,7 @@
             <div class="help-body">
                 <ul>
                     <li>Le bouton à côté du zoom, en haut de la table, bascule entre <i class="fa-solid fa-table-cells-large"></i> <strong>Compact</strong> (les combinaisons à la suite) et <i class="fa-solid fa-table-columns"></i> <strong>Suites / Séries</strong> (deux bandes séparées, plus une bande « En cours » pour les combinaisons incomplètes).</li>
-                    <li><strong>Zoom</strong> : boutons − <i class="fa-solid fa-expand"></i> + en haut de la table (<i class="fa-solid fa-expand"></i> ajuste tout à l'écran) ; sur ordinateur, Ctrl + molette.</li>
+                    <li><strong>Zoom</strong> : automatique par défaut, pour que toute la table tienne à l'écran. Les boutons − et + en haut de la table passent en zoom manuel ; <i class="fa-solid fa-expand"></i> (doré quand il est actif) rétablit le zoom automatique. Sur ordinateur : Ctrl + molette.</li>
                 </ul>
             </div>
         </details>
@@ -3483,7 +3481,6 @@
         }
     } catch(e) {}
     let autoFitEnabled = (zoomMode === 'auto');
-    let isFittingZoom = false;
 
     function setZoomMode(mode) {
         zoomMode = (mode === 'manual') ? 'manual' : 'auto';
