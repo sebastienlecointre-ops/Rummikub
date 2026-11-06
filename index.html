@@ -479,8 +479,7 @@
             flex: 1;
             container-type: inline-size;
             min-width: 0;
-            --board-zoom: 1;
-            --tile-w: calc(clamp(32px, 6vw, 48px) * var(--board-zoom, 1));
+            --tile-w: var(--board-tile-w, clamp(32px, 6vw, 48px));
             --tile-h: calc(var(--tile-w) * 1.25);
             background: var(--panel-glass-bg);
             border: 1px solid var(--panel-glass-border);
@@ -492,10 +491,10 @@
             flex-direction: column;
             min-height: 0;
             overflow-y: auto;
+            overflow-x: hidden;
             box-shadow: inset 0 2px 10px var(--shadow-color);
         }
         .board-container.board-narrow {
-            --tile-w: calc(clamp(26px, 7.2vw, 30px) * var(--board-zoom, 1));
             padding: 4px;
         }
         .board-container.board-narrow .board-col-container {
@@ -503,7 +502,7 @@
             gap: 4px;
         }
         .board-container.board-narrow .board-col-melds {
-            gap: 4px;
+            gap: 10px 4px;
         }
         .board-container.board-narrow .meld-row {
             padding: 6px 2px 4px 2px;
@@ -627,13 +626,14 @@
             flex: 1 0 auto;
             min-height: 180px;
             padding-bottom: 8px;
+            padding-top: 8px;
         }
 
         .meld-row {
             display: flex;
-            flex-wrap: nowrap;
-            overflow-x: auto;
-            overflow-y: hidden;
+            flex-wrap: wrap;
+            row-gap: 6px;
+            overflow: visible;
             align-items: center;
             gap: 0;
             background: var(--row-bg);
@@ -643,7 +643,6 @@
             min-height: calc(var(--tile-h) + 16px);
             position: relative;
             transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
-            scrollbar-width: thin;
             scroll-margin-bottom: var(--context-panel-h, 0px);
         }
         .meld-row.valid-meld {
@@ -659,6 +658,26 @@
         .merge-num { width: 18px; height: 18px; border-radius: 50%; background: var(--accent-gold); color: #000; display: inline-flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 800; font-family: var(--font-mono); margin-right: 2px; }
         .merge-num-tag { margin-left: 6px; flex-shrink: 0; pointer-events: none; }
         .btn-merge-meld .merge-preview { font-family: var(--font-mono); white-space: nowrap; }
+        .btn-merge-meld {
+            position: relative;
+            height: calc(var(--tile-h) * 0.75);
+            min-height: 26px;
+            padding: 0 6px;
+            margin-left: 4px;
+            font-size: max(0.68rem, calc(var(--tile-w) * 0.3));
+            font-weight: 700;
+            border-radius: 8px;
+            border: 1px solid var(--accent-gold);
+            background: var(--surface-2);
+            color: var(--accent-gold);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+        /* Zone tactile invisible élargie (≥ 36 px) */
+        .btn-merge-meld::after, .btn-joker-choice::after { content: ''; position: absolute; inset: -6px; }
         @media (max-width: 640px) { .btn-merge-meld .merge-preview { max-width: 64px; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: bottom; } }
         .meld-row.drag-target-active {
             border-color: var(--accent-gold) !important;
@@ -673,10 +692,6 @@
             border: 2px dashed var(--warning) !important;
             background: var(--warning-bg) !important;
         }
-        .meld-row.invalid-meld,
-        .meld-row.incomplete-meld {
-            padding-top: 18px;
-        }
         .meld-row.row-just-dropped {
             border-color: #38bdf8 !important;
             box-shadow: 0 0 16px rgba(56, 189, 248, 0.6) !important;
@@ -684,7 +699,7 @@
 
         .meld-type-tag {
             position: absolute;
-            top: 2px;
+            top: -9px;
             right: 8px;
             font-size: 0.62rem;
             font-weight: 700;
@@ -786,7 +801,7 @@
         .joker-val-selector {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
+            gap: 8px;
             margin-left: 8px;
             padding: 3px 8px;
             background: var(--chip-bg);
@@ -801,12 +816,13 @@
             white-space: nowrap;
         }
         .btn-joker-choice {
-            min-width: 44px;
-            min-height: 44px;
-            padding: 4px 10px;
+            position: relative;
+            min-width: max(28px, calc(var(--tile-w) * 0.85));
+            min-height: max(28px, calc(var(--tile-h) * 0.75));
+            padding: 0 6px;
             font-family: var(--font-mono);
             font-weight: 700;
-            font-size: 0.95rem;
+            font-size: max(0.8rem, calc(var(--tile-w) * 0.4));
             border-radius: 6px;
             border: 1px solid var(--border);
             background: var(--surface-2);
@@ -916,7 +932,8 @@
             display: flex;
             flex-wrap: wrap;
             align-content: flex-start;
-            gap: 8px;
+            gap: 12px 8px;
+            padding-top: 8px;
             min-height: 60px;
         }
         .board-col-melds .meld-row {
@@ -2360,7 +2377,7 @@
                 margin: -2px -2px 4px -2px;
             }
             .board-col-melds {
-                gap: 6px;
+                gap: 10px 6px;
                 min-height: 40px;
             }
         }
@@ -2667,10 +2684,10 @@
 					<button class="btn-board-tool" id="btn-layout-toggle" type="button" onclick="toggleBoardLayout()" title="Affichage : Compact — toucher pour passer à Suites / Séries" aria-label="Affichage : Compact — toucher pour passer à Suites / Séries">
 						<i class="fa-solid fa-table-cells-large" id="btn-layout-toggle-icon"></i>
 					</button>
-                    <div class="board-zoom-control" title="Zoom du plateau (Ctrl + molette ou +/-) - min 60%">
+                    <div class="board-zoom-control" title="Taille des tuiles (Ctrl + molette ou +/-)">
                         <button class="btn-zoom-step" onclick="adjustBoardZoom(-0.05)" title="Dézoomer (-)"><i class="fa-solid fa-minus"></i></button>
-                        <button class="btn-zoom-step" id="btn-zoom-fit" onclick="setZoomMode('auto'); fitBoardZoom()" title="Ajuster le plateau à l'écran" aria-label="Ajuster le plateau à l'écran"><i class="fa-solid fa-expand"></i></button>
-                        <input type="range" id="board-zoom-slider" min="60" max="130" value="100" step="5" oninput="setZoomMode('manual'); applyBoardZoom(this.value / 100)" title="Niveau de zoom">
+                        <button class="btn-zoom-step" id="btn-zoom-fit" onclick="resetBoardZoomBias(); fitBoardZoom()" title="Ajuster le plateau à l'écran" aria-label="Ajuster le plateau à l'écran"><i class="fa-solid fa-expand"></i></button>
+                        <input type="range" id="board-zoom-slider" min="60" max="130" value="100" step="5" oninput="applyBoardZoom(this.value / 100)" title="Niveau de zoom">
                         <span id="board-zoom-val">100%</span>
                         <button class="btn-zoom-step" onclick="adjustBoardZoom(0.05)" title="Zoomer (+)"><i class="fa-solid fa-plus"></i></button>
                     </div>
@@ -2961,7 +2978,7 @@
             <div class="help-body">
                 <ul>
                     <li>Le bouton à côté du zoom, en haut de la table, bascule entre <i class="fa-solid fa-table-cells-large"></i> <strong>Compact</strong> (les combinaisons à la suite) et <i class="fa-solid fa-table-columns"></i> <strong>Suites / Séries</strong> (deux bandes séparées, plus une bande « En cours » pour les combinaisons incomplètes).</li>
-                    <li><strong>Zoom</strong> : automatique par défaut, pour que toute la table tienne à l'écran. Les boutons − et + en haut de la table passent en zoom manuel ; <i class="fa-solid fa-expand"></i> (doré quand il est actif) rétablit le zoom automatique. Sur ordinateur : Ctrl + molette.</li>
+                    <li><strong>Zoom</strong> : automatique, la taille des tuiles s'adapte au nombre de combinaisons ; si la table est très chargée, elle défile verticalement. Les boutons − et + rendent les tuiles plus petites ou plus grandes tout en gardant l'adaptation ; <i class="fa-solid fa-expand"></i> revient au réglage normal. Sur ordinateur : Ctrl + molette.</li>
                 </ul>
             </div>
         </details>
@@ -5559,7 +5576,7 @@
     function closeHelpModal() { const o = document.getElementById('help-overlay'); if (o) o.style.display = 'none'; resumeTurnTimer(); }
     function setAutoFitSetting(enabled) {
 		setZoomMode(enabled ? 'auto' : 'manual');
-		if (enabled) fitBoardZoom();
+		fitBoardZoom();
 	}
 	function onSettingsAutoFitChange(checked) {
 		setAutoFitSetting(checked);
@@ -6948,137 +6965,164 @@
         return logs;
     }
 
-    const ZOOM_MIN = 0.6;
-    const ZOOM_MAX = 1.0;
+    // ===================== ZOOM DU PLATEAU =====================
+    // Le contrôleur calcule une largeur de tuile en px, appliquée via --board-tile-w.
+    // currentBoardZoom = préférence de l'utilisateur (multiplicateur, 1 = neutre), réglée par − / +.
+    const ZOOM_CFG = Object.freeze({
+        maxFine: 48, maxCoarse: 44,          // taille maximale des tuiles (souris / tactile)
+        comfortMin: 34,                       // en dessous, on accepte le défilement vertical
+        hardMinFine: 28, hardMinCoarse: 30,   // minimum absolu du zoom automatique
+        step: 2, idleMs: 600,                 // paliers de 2 px, ajustement après 600 ms de pause
+        biasMin: 0.6, biasMax: 1.3,           // plage du réglage − / +
+        absMin: 20, absMax: 64, fixedW: 40    // bornes finales et taille fixe si l'auto est désactivé
+    });
     let currentBoardZoom = 1;
-    function applyBoardZoom(val, { persist = true } = {}) {
-        const clamped = Math.max(0.6, Math.min(1.3, Math.round(val * 100) / 100));
-        currentBoardZoom = clamped;
-        const board = document.getElementById('board-container');
-        if (board) {
-            board.style.setProperty('--board-zoom', String(clamped));
-        }
-        const slider = document.getElementById('board-zoom-slider');
-        if (slider) slider.value = String(Math.round(clamped * 100));
-        const zoomText = (zoomMode === 'auto') ? 'Auto' : `${Math.round(clamped * 100)}%`;
-        const label = document.getElementById('board-zoom-val');
-        if (label) label.textContent = zoomText;
-        syncSettingsControls();
-        if (persist && zoomMode === 'manual') {
-            try { localStorage.setItem('rummikub_board_zoom', String(clamped)); } catch (e) {}
-        }
+    let appliedTileW = null;
+    let zoomAnchorRowId = null;
+    let zoomIdleTimer = null;
+    let autoFitPending = false;
+    let autoFitDeferred = false;
+
+    function getZoomBounds() {
+        const coarse = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+        return {
+            max: coarse ? ZOOM_CFG.maxCoarse : ZOOM_CFG.maxFine,
+            comfort: ZOOM_CFG.comfortMin,
+            hardMin: coarse ? ZOOM_CFG.hardMinCoarse : ZOOM_CFG.hardMinFine
+        };
     }
 
-    function boardFits(board) {
-        if (!board) return true;
-        if (board.scrollHeight > board.clientHeight + 1) return false;
-        if (board.scrollWidth > board.clientWidth + 1) return false;
-        const rows = board.querySelectorAll('.meld-row');
-        for (const row of rows) {
-            if (row.scrollWidth > row.clientWidth + 1) return false;
-        }
-        return true;
+    // Fonction pure. samples = [{ w, wraps, overflowY }], du plus grand au plus petit palier.
+    // 1) Tout tient sans défilement avec des tuiles de taille confortable : on prend la plus grande.
+    // 2) Sinon, on accepte le défilement vertical : plus grande taille <= confort sans passage à la ligne.
+    // 3) Sinon, minimum absolu (les combinaisons trop longues passent sur 2 lignes).
+    function decideTileWidth(samples, bounds) {
+        for (const s of samples) if (s.w >= bounds.comfort && !s.wraps && !s.overflowY) return s.w;
+        for (const s of samples) if (s.w <= bounds.comfort && !s.wraps) return s.w;
+        return bounds.hardMin;
     }
 
-    function computeFitZoom() {
+    function rowIsWrapped(row) {
+        const tiles = row.querySelectorAll('.tile');
+        return tiles.length > 1 && tiles[tiles.length - 1].offsetTop > tiles[0].offsetTop + 2;
+    }
+
+    function measureBoardAt(board, w) {
+        board.style.setProperty('--board-tile-w', w + 'px');
+        let wraps = false;
+        for (const r of board.querySelectorAll('.meld-row')) { if (rowIsWrapped(r)) { wraps = true; break; } }
+        return { w, wraps, overflowY: board.scrollHeight > board.clientHeight + 1 };
+    }
+
+    function computeAutoTileWidth() {
+        const bounds = getZoomBounds();
         const board = document.getElementById('board-container');
-        if (!board) return ZOOM_MAX;
-        const savedScrollTop = board.scrollTop;
-
-        board.style.setProperty('--board-zoom', String(ZOOM_MAX));
-        if (boardFits(board)) {
-            board.scrollTop = savedScrollTop;
-            return ZOOM_MAX;
+        if (!board) return bounds.max;
+        const savedScroll = board.scrollTop;
+        const samples = [];
+        for (let w = bounds.max; w >= bounds.hardMin; w -= ZOOM_CFG.step) {
+            const s = measureBoardAt(board, w);
+            samples.push(s);
+            if (!s.wraps && !s.overflowY) break; // ce palier tient : inutile de descendre plus bas
         }
+        if (appliedTileW !== null) board.style.setProperty('--board-tile-w', appliedTileW + 'px');
+        board.scrollTop = savedScroll;
+        return decideTileWidth(samples, bounds);
+    }
 
-        board.style.setProperty('--board-zoom', String(ZOOM_MIN));
-        if (!boardFits(board)) {
-            board.scrollTop = savedScrollTop;
-            return ZOOM_MIN;
+    function getTargetTileWidth() {
+        const base = (zoomMode === 'auto') ? computeAutoTileWidth() : ZOOM_CFG.fixedW;
+        return Math.max(ZOOM_CFG.absMin, Math.min(ZOOM_CFG.absMax, Math.round(base * currentBoardZoom)));
+    }
+
+    // Applique la taille en gardant à l'écran la dernière ligne manipulée.
+    function applyTileWidth(w) {
+        const board = document.getElementById('board-container');
+        if (!board) return;
+        const anchor = zoomAnchorRowId !== null ? board.querySelector(`.meld-row[data-row-id="${zoomAnchorRowId}"]`) : null;
+        const topBefore = anchor ? anchor.getBoundingClientRect().top : 0;
+        board.style.setProperty('--board-tile-w', w + 'px');
+        appliedTileW = w;
+        if (anchor) board.scrollTop += anchor.getBoundingClientRect().top - topBefore;
+    }
+
+    function refreshBoardTileWidth(force = false) {
+        const target = getTargetTileWidth();
+        if (force || appliedTileW === null || Math.abs(target - appliedTileW) >= ZOOM_CFG.step) {
+            applyTileWidth(target);
         }
+        return appliedTileW;
+    }
 
-        let lo = ZOOM_MIN;
-        let hi = ZOOM_MAX;
-        for (let iter = 0; iter < 6; iter++) {
-            const mid = (lo + hi) / 2;
-            board.style.setProperty('--board-zoom', String(mid));
-            if (boardFits(board)) {
-                lo = mid;
-            } else {
-                hi = mid;
-            }
-        }
-
-        board.scrollTop = savedScrollTop;
-        return Math.floor(lo * 100) / 100;
+    function isZoomFrozen() {
+        return pointerState.isDragging || isAiAnimating || isDemoAnimating || gameState === 'ANIMATING';
     }
 
     async function fitBoardZoom() {
-        if (pointerState.isDragging || isAiAnimating || gameState === 'ANIMATING' || isDemoActive) {
+        if (pointerState.isDragging || isAiAnimating || gameState === 'ANIMATING' || isDemoActive) return;
+        clearTimeout(zoomIdleTimer);
+        return refreshBoardTileWidth(true);
+    }
+
+    // Pendant le tour du joueur : ajustement après une pause (idleMs), à la hausse comme à la baisse.
+    // Ailleurs (tour IA, changement d'affichage, redimensionnement) : ajustement à l'image suivante.
+    function scheduleAutoFit({ allowGrow = false } = {}) {
+        if (zoomMode !== 'auto') return;
+        if (isZoomFrozen()) { autoFitDeferred = true; return; }
+        if (gameState === 'PLAYER_TURN' && !allowGrow) {
+            clearTimeout(zoomIdleTimer);
+            zoomIdleTimer = setTimeout(() => {
+                if (isZoomFrozen()) { autoFitDeferred = true; return; }
+                refreshBoardTileWidth();
+            }, ZOOM_CFG.idleMs);
             return;
         }
-        const z = computeFitZoom();
-        applyBoardZoom(z, { persist: false });
-        return z;
+        if (autoFitPending) return;
+        autoFitPending = true;
+        requestAnimationFrame(() => {
+            autoFitPending = false;
+            if (isZoomFrozen()) { autoFitDeferred = true; return; }
+            refreshBoardTileWidth();
+        });
     }
-
-    let autoFitPending = false;
-    let autoFitDeferred = false;
-    let autoFitGrowRequested = false;
-
-	function scheduleAutoFit({ allowGrow = false } = {}) {
-		if (zoomMode !== 'auto') return;
-		if (allowGrow) autoFitGrowRequested = true;
-		if (autoFitPending) return;
-		autoFitPending = true;
-		requestAnimationFrame(() => {
-			autoFitPending = false;
-			if (pointerState.isDragging || isAiAnimating || isDemoAnimating || gameState === 'ANIMATING') {
-				autoFitDeferred = true;
-				return;
-			}
-			const canGrow = autoFitGrowRequested || gameState !== 'PLAYER_TURN';
-			autoFitGrowRequested = false;
-			const z = computeFitZoom();
-			if (z < currentBoardZoom || (canGrow && z - currentBoardZoom >= 0.02)) {
-				applyBoardZoom(z, { persist: false });
-			} else {
-				const board = document.getElementById('board-container');
-				if (board) board.style.setProperty('--board-zoom', String(currentBoardZoom));
-			}
-		});
-	}
 
     function flushDeferredAutoFit() {
-        if (autoFitDeferred) {
-            autoFitDeferred = false;
-            scheduleAutoFit();
-        }
+        if (!autoFitDeferred) return;
+        autoFitDeferred = false;
+        scheduleAutoFit();
     }
 
-    function adjustBoardZoom(delta) {
-        setZoomMode('manual');
-        applyBoardZoom(currentBoardZoom + delta);
+    // Règle la préférence de l'utilisateur (multiplicateur appliqué à la taille automatique).
+    function applyBoardZoom(val, { persist = true } = {}) {
+        currentBoardZoom = Math.max(ZOOM_CFG.biasMin, Math.min(ZOOM_CFG.biasMax, Math.round(val * 100) / 100));
+        const slider = document.getElementById('board-zoom-slider');
+        if (slider) slider.value = String(Math.round(currentBoardZoom * 100));
+        syncSettingsControls();
+        if (persist) { try { localStorage.setItem('rummikub_zoom_bias', String(currentBoardZoom)); } catch (e) {} }
+        if (!isZoomFrozen()) refreshBoardTileWidth(true);
+    }
+
+    function adjustBoardZoom(delta) { applyBoardZoom(currentBoardZoom + delta); }
+    function resetBoardZoomBias() { applyBoardZoom(1); }
+
+    function getZoomLabel() {
+        return (zoomMode === 'auto' && currentBoardZoom === 1) ? 'Auto' : `${Math.round(currentBoardZoom * 100)}%`;
     }
 
     function loadBoardZoom() {
+        let mode = 'auto', bias = 1;
         try {
-            const savedMode = localStorage.getItem('rummikub_zoom_mode');
-            if (savedMode === 'manual' || savedMode === 'auto') {
-                setZoomMode(savedMode);
-            } else {
-                setZoomMode('auto');
+            if (localStorage.getItem('rummikub_zoom_mode') === 'manual') mode = 'manual';
+            // Ancien système : le mode « manuel » venait d'un simple appui sur − / + -> on repasse en auto.
+            if (localStorage.getItem('rummikub_board_zoom') !== null) {
+                localStorage.removeItem('rummikub_board_zoom');
+                mode = 'auto';
             }
-            const saved = localStorage.getItem('rummikub_board_zoom');
-            if (saved !== null) {
-                const parsed = parseFloat(saved);
-                if (!isNaN(parsed)) {
-                    applyBoardZoom(parsed, { persist: false });
-                    return;
-                }
-            }
+            const b = parseFloat(localStorage.getItem('rummikub_zoom_bias'));
+            if (!isNaN(b)) bias = b;
         } catch (e) {}
-        applyBoardZoom(1, { persist: false });
+        setZoomMode(mode);
+        applyBoardZoom(bias, { persist: false });
     }
 
     function handleLastAiMoveClick() {
@@ -9285,6 +9329,7 @@
     let lastJustDroppedTileId = null;
     function highlightAndScrollToRow(rowId) {
         if (rowId === undefined || rowId === null) return;
+        zoomAnchorRowId = rowId;
         requestAnimationFrame(() => {
             const rowEl = document.querySelector(`.meld-row[data-row-id="${rowId}"]`);
             if (rowEl) {
@@ -11027,7 +11072,7 @@
             if ((grp.anchorRow || grp.targetRow).id === row.id) {
                 let b = rowEl.querySelector('.btn-merge-meld') || document.createElement('button');
                 b.type = 'button'; b.className = 'btn-merge-meld';
-                b.style.cssText = 'min-height:44px;min-width:44px;padding:0 8px;font-size:0.75rem;font-weight:700;border-radius:8px;border:1px solid var(--accent-gold);background:var(--surface-2);color:var(--accent-gold);cursor:pointer;display:inline-flex;align-items:center;gap:4px;margin-left:6px;flex-shrink:0;';
+                b.style.cssText = '';
                 b.innerHTML = '<span class="merge-num">' + k + '</span> ⇄ <span class="merge-preview">' + grp.shortText + '</span>';
                 b.title = 'Regrouper → ' + grp.previewText;
                 b.setAttribute('aria-label', 'Fusionner : ' + grp.previewText);
@@ -11638,7 +11683,7 @@
     }
     function syncSettingsControls() {
         const isCb = document.body.classList.contains('colorblind-mode');
-        const zoomPct = (zoomMode === 'auto') ? 'Auto' : `${Math.round(currentBoardZoom * 100)}%`;
+        const zoomPct = getZoomLabel();
 
         document.querySelectorAll('input[name="welcome-ai"], input[name="setting-ai"]').forEach(el => {
             el.checked = (el.value === aiProfile);
@@ -11681,7 +11726,7 @@
         const zoomVal = document.getElementById('board-zoom-val');
         if (zoomVal) zoomVal.textContent = zoomPct;
 		const fitBtn = document.getElementById('btn-zoom-fit');
-		if (fitBtn) fitBtn.classList.toggle('active', zoomMode === 'auto');
+		if (fitBtn) fitBtn.classList.toggle('active', zoomMode === 'auto' && currentBoardZoom === 1);
         const hl = document.getElementById('welcome-help-link'); if (hl) hl.style.outline = localStorage.getItem('rummikub_help_seen') ? 'none' : '2px solid var(--accent-gold)';
 
         const aiDesc = getAiLevelDescription(aiProfile);
@@ -13273,14 +13318,13 @@
         });
 
         await runTestCase("Zoom du plateau : applyBoardZoom borne entre 60% et 130% et persiste dans localStorage", () => {
-            setZoomMode('manual');
             applyBoardZoom(0.5);
             assert(currentBoardZoom === 0.6, `Attendu 0.6, obtenu ${currentBoardZoom}`);
             applyBoardZoom(1.5);
             assert(currentBoardZoom === 1.3, `Attendu 1.3, obtenu ${currentBoardZoom}`);
             applyBoardZoom(1.0);
             assert(currentBoardZoom === 1.0, `Attendu 1.0, obtenu ${currentBoardZoom}`);
-            const saved = localStorage.getItem('rummikub_board_zoom');
+            const saved = localStorage.getItem('rummikub_zoom_bias');
             assert(saved === '1', `Attendu '1' dans localStorage, obtenu '${saved}'`);
             return "applyBoardZoom borne correctement et synchronise le slider et localStorage";
         });
@@ -14543,6 +14587,7 @@
             const savedLayout = boardLayoutMode;
             const savedWidth = board.style.width;
             const wasNarrow = board.classList.contains('board-narrow');
+            const savedTileW = appliedTileW;
 
             try {
                 tileAssertSilenced = true;
@@ -14575,6 +14620,7 @@
 
                 board.style.width = '360px';
                 board.classList.add('board-narrow');
+                applyTileWidth(30); // taille fixe : ce test vérifie la mise en page, pas le zoom
                 updateUI();
 
                 const colRuns = meldsArea.querySelector('#col-runs-container');
@@ -14596,6 +14642,7 @@
             } finally {
                 board.style.width = savedWidth;
                 board.classList.toggle('board-narrow', wasNarrow);
+                if (savedTileW !== null) applyTileWidth(savedTileW);
                 boardRows = savedBoard;
                 setBoardLayoutMode(savedLayout);
                 tileAssertSilenced = false;
@@ -16578,14 +16625,15 @@
                 board.style.maxHeight = '300px';
                 updateUI();
 
-                const z = await fitBoardZoom();
-                const toolbarH = toolbar ? toolbar.offsetHeight : 0;
-                const availableHeight = board.clientHeight - toolbarH;
-
-                assert(z >= 0.6 && z <= 1.0, `Zoom attendu dans [0.6, 1.0], obtenu ${z}`);
-                assert(meldsArea.scrollHeight <= availableHeight || z === 0.6, `scrollHeight (${meldsArea.scrollHeight}) doit être <= availableHeight (${availableHeight}) ou zoom === 0.6 (obtenu: ${z})`);
-
-                return `Zoom ajusté à ${z} (scrollHeight: ${meldsArea.scrollHeight}px, dispo: ${availableHeight}px)`;
+                const bounds = getZoomBounds();
+                const w = await fitBoardZoom();
+                assert(w >= bounds.hardMin && w <= bounds.max, `w attendu dans [${bounds.hardMin}, ${bounds.max}], obtenu ${w}`);
+                const anyWrapped = Array.from(board.querySelectorAll('.meld-row')).some(rowIsWrapped);
+                assert(!anyWrapped || w === bounds.hardMin, "Aucune rangée ne doit passer à la ligne sauf à hardMin");
+                if (board.scrollHeight > board.clientHeight + 1) {
+                    assert(w <= bounds.comfort, `En cas de défilement vertical, w (${w}) doit être <= comfort (${bounds.comfort})`);
+                }
+                return `Taille ajustée à ${w}px (hardMin=${bounds.hardMin}, max=${bounds.max}, comfort=${bounds.comfort})`;
             } finally {
                 board.style.height = savedH;
                 board.style.maxHeight = savedMaxH;
@@ -16613,9 +16661,10 @@
                     ]
                 }];
                 updateUI();
-                const z = await fitBoardZoom();
-                assert(z === 1.0, `Zoom attendu 1.0 avec 1 rangée, obtenu ${z}`);
-                return "fitBoardZoom() renvoie 1.0 avec 1 rangée";
+                const bounds = getZoomBounds();
+                const w = await fitBoardZoom();
+                assert(w === bounds.max, `Taille attendue ${bounds.max}px avec 1 rangée, obtenu ${w}`);
+                return `fitBoardZoom() renvoie ${bounds.max}px avec 1 rangée`;
             } finally {
                 boardRows = savedBoard;
                 applyBoardZoom(savedZoom);
@@ -16626,40 +16675,23 @@
 
         await runTestCase("Mode de zoom : bascule auto / manuel, persistance et affichage 'Auto'", () => {
             const savedMode = zoomMode;
+            const savedZoom = currentBoardZoom;
             try {
                 setZoomMode('auto');
-                assert(zoomMode === 'auto', "zoomMode doit être 'auto'");
-                assert(autoFitEnabled === true, "autoFitEnabled doit être true quand zoomMode === 'auto'");
-                assert(localStorage.getItem('rummikub_zoom_mode') === 'auto', "localStorage doit contenir 'auto'");
-
+                applyBoardZoom(1, { persist: false });
+                assert(getZoomLabel() === 'Auto', "getZoomLabel() doit renvoyer 'Auto' quand bias === 1");
                 applyBoardZoom(1.2, { persist: true });
-                assert(currentBoardZoom === 1.2, "Le zoom doit être appliqué");
-                const valEl = document.getElementById('board-zoom-val');
-                assert(valEl && valEl.textContent === 'Auto', `L'affichage doit être 'Auto' en mode auto, obtenu '${valEl?.textContent}'`);
-
-                adjustBoardZoom(-0.05);
-                assert(zoomMode === 'manual', "adjustBoardZoom doit basculer en 'manual'");
-                assert(autoFitEnabled === false, "autoFitEnabled doit être false en mode manual");
+                assert(currentBoardZoom === 1.2 && getZoomLabel() === '120%', "120% quand bias !== 1");
+                assert(localStorage.getItem('rummikub_zoom_bias') === '1.2', "rummikub_zoom_bias persisté");
+                resetBoardZoomBias();
+                assert(currentBoardZoom === 1 && getZoomLabel() === 'Auto', "resetBoardZoomBias remet à 1 et 'Auto'");
+                setZoomMode('manual');
+                assert(zoomMode === 'manual' && getZoomLabel() === '100%', "Manuel: 100%");
                 assert(localStorage.getItem('rummikub_zoom_mode') === 'manual', "localStorage doit contenir 'manual'");
-                assert(valEl && valEl.textContent !== 'Auto', "L'affichage doit être le pourcentage en mode manual");
-
-                const slider = document.getElementById('board-zoom-slider');
-                if (slider) {
-                    setZoomMode('auto');
-                    slider.value = "110";
-                    slider.dispatchEvent(new Event('input'));
-                    assert(zoomMode === 'manual', "Le slider doit basculer zoomMode à 'manual'");
-                }
-
-                const fitBtn = document.getElementById('btn-zoom-fit');
-                if (fitBtn) {
-                    fitBtn.click();
-                    assert(zoomMode === 'auto', "Le bouton fit doit basculer zoomMode à 'auto'");
-                }
-
-                return "zoomMode bascule auto/manuel, autoFitEnabled synchronisé, affichage 'Auto' et persistance conformes";
+                return "zoomMode bascule auto/manuel, getZoomLabel() et persistance conformes";
             } finally {
                 setZoomMode(savedMode);
+                applyBoardZoom(savedZoom, { persist: false });
             }
         });
 
@@ -16668,6 +16700,7 @@
             const savedPending = autoFitPending;
             const savedDeferred = autoFitDeferred;
             try {
+                await new Promise(r => requestAnimationFrame(r)); // laisse terminer le recalcul lancé par le test précédent
                 setZoomMode('manual');
                 scheduleAutoFit();
                 assert(autoFitPending === false, "scheduleAutoFit ne doit rien planifier en mode manual");
@@ -16702,23 +16735,21 @@
         });
 
         await runTestCase("Ajustement zoom : fitBoardZoom() ne fait rien si pointerState.isDragging ou isAiAnimating est vrai", async () => {
-            const savedZoom = currentBoardZoom;
-            applyBoardZoom(0.80);
+            const savedW = appliedTileW;
 
             pointerState.isDragging = true;
             const resDrag = await fitBoardZoom();
             pointerState.isDragging = false;
-            assert(currentBoardZoom === 0.80, `Le zoom ne doit pas changer pendant un drag (attendu 0.80, obtenu ${currentBoardZoom})`);
+            assert(appliedTileW === savedW, "appliedTileW doit rester inchangé pendant un drag");
             assert(resDrag === undefined, "fitBoardZoom doit retourner undefined pendant un drag");
 
             isAiAnimating = true;
             const resAi = await fitBoardZoom();
             isAiAnimating = false;
-            assert(currentBoardZoom === 0.80, `Le zoom ne doit pas changer pendant l'animation IA (attendu 0.80, obtenu ${currentBoardZoom})`);
+            assert(appliedTileW === savedW, "appliedTileW doit rester inchangé pendant l'animation IA");
             assert(resAi === undefined, "fitBoardZoom doit retourner undefined pendant l'animation IA");
 
-            applyBoardZoom(savedZoom);
-            return "fitBoardZoom() inerte pendant le drag et l'animation IA";
+            return "appliedTileW inchangé pendant le drag et l'animation IA";
         });
 
         await runTestCase("Zoom automatique : réglage synchronisé avec zoomMode, sans clé rummikub_auto_fit", () => {
@@ -16739,77 +16770,63 @@
 			}
 		});
 
-        await runTestCase("Zoom : le bouton + passe zoomMode à 'manual' et persiste dans localStorage", () => {
+        await runTestCase("Zoom : le bouton + ajuste le biais sans changer zoomMode et persiste dans localStorage", () => {
             const savedMode = zoomMode;
             const savedZoom = currentBoardZoom;
-            const savedStorageZoom = localStorage.getItem('rummikub_board_zoom');
-            const savedStorageMode = localStorage.getItem('rummikub_zoom_mode');
             try {
                 setZoomMode('auto');
+                const initialZoom = currentBoardZoom;
                 const plusBtn = document.querySelector('.board-zoom-control button[title="Zoomer (+)"]');
                 assert(plusBtn !== null, "Le bouton + (.board-zoom-control button[title='Zoomer (+)']) doit exister");
                 plusBtn.click();
 
-                assert(zoomMode === 'manual', `zoomMode attendu 'manual', obtenu '${zoomMode}'`);
-                assert(localStorage.getItem('rummikub_zoom_mode') === 'manual', "localStorage 'rummikub_zoom_mode' attendu 'manual'");
-                assert(localStorage.getItem('rummikub_board_zoom') === String(currentBoardZoom), `localStorage 'rummikub_board_zoom' attendu '${currentBoardZoom}', obtenu '${localStorage.getItem('rummikub_board_zoom')}'`);
-                return "Bouton + : bascule à 'manual' et enregistre le zoom dans localStorage";
+                assert(zoomMode === 'auto', `zoomMode doit rester 'auto', obtenu '${zoomMode}'`);
+                assert(currentBoardZoom === Math.round((initialZoom + 0.05) * 100) / 100, "currentBoardZoom incrémenté de 0.05");
+                assert(localStorage.getItem('rummikub_zoom_bias') === String(currentBoardZoom), "rummikub_zoom_bias mis à jour");
+                return "Bouton + : ajuste le biais sans changer zoomMode";
             } finally {
                 setZoomMode(savedMode);
                 applyBoardZoom(savedZoom, { persist: false });
-                if (savedStorageZoom !== null) localStorage.setItem('rummikub_board_zoom', savedStorageZoom);
-                else localStorage.removeItem('rummikub_board_zoom');
-                if (savedStorageMode !== null) localStorage.setItem('rummikub_zoom_mode', savedStorageMode);
-                else localStorage.removeItem('rummikub_zoom_mode');
             }
         });
 
-        await runTestCase("Zoom : le bouton ⤢ repasse zoomMode à 'auto' et enregistre 'auto' dans localStorage", () => {
-            const savedMode = zoomMode;
+        await runTestCase("Zoom : le bouton ⤢ réinitialise le biais à 1 via resetBoardZoomBias()", () => {
             const savedZoom = currentBoardZoom;
-            const savedStorageMode = localStorage.getItem('rummikub_zoom_mode');
             try {
-                setZoomMode('manual');
-                assert(zoomMode === 'manual', "zoomMode doit être initialisé à 'manual'");
+                applyBoardZoom(1.2);
                 const fitBtn = document.getElementById('btn-zoom-fit');
                 assert(fitBtn !== null, "Le bouton ⤢ (#btn-zoom-fit) doit exister");
                 fitBtn.click();
 
-                assert(zoomMode === 'auto', `zoomMode attendu 'auto', obtenu '${zoomMode}'`);
-                assert(localStorage.getItem('rummikub_zoom_mode') === 'auto', `localStorage 'rummikub_zoom_mode' attendu 'auto', obtenu '${localStorage.getItem('rummikub_zoom_mode')}'`);
-                return "Bouton ⤢ : bascule à 'auto' et persiste 'auto' dans localStorage";
+                assert(currentBoardZoom === 1, `currentBoardZoom attendu 1, obtenu ${currentBoardZoom}`);
+                assert(localStorage.getItem('rummikub_zoom_bias') === '1', "rummikub_zoom_bias doit valoir '1'");
+                return "Bouton ⤢ : réinitialise le biais à 1";
             } finally {
-                setZoomMode(savedMode);
                 applyBoardZoom(savedZoom, { persist: false });
-                if (savedStorageMode !== null) localStorage.setItem('rummikub_zoom_mode', savedStorageMode);
-                else localStorage.removeItem('rummikub_zoom_mode');
             }
         });
 
         await runTestCase("Zoom : en mode auto, applyBoardZoom avec persist: false ne modifie pas le zoom dans localStorage", () => {
             const savedMode = zoomMode;
             const savedZoom = currentBoardZoom;
-            const savedStorageZoom = localStorage.getItem('rummikub_board_zoom');
-            const savedStorageMode = localStorage.getItem('rummikub_zoom_mode');
+            const savedStorageBias = localStorage.getItem('rummikub_zoom_bias');
             try {
                 setZoomMode('auto');
-                localStorage.setItem('rummikub_board_zoom', '1');
+                localStorage.setItem('rummikub_zoom_bias', '1');
                 applyBoardZoom(0.8, { persist: false });
 
                 assert(currentBoardZoom === 0.8, `currentBoardZoom attendu 0.8, obtenu ${currentBoardZoom}`);
-                assert(localStorage.getItem('rummikub_board_zoom') === '1', `localStorage attendu inchangé à '1', obtenu '${localStorage.getItem('rummikub_board_zoom')}'`);
+                assert(localStorage.getItem('rummikub_zoom_bias') === '1', `localStorage attendu inchangé à '1', obtenu '${localStorage.getItem('rummikub_zoom_bias')}'`);
                 return "applyBoardZoom avec persist: false ne modifie pas le zoom dans localStorage en mode auto";
             } finally {
                 setZoomMode(savedMode);
                 applyBoardZoom(savedZoom, { persist: false });
-                if (savedStorageZoom !== null) localStorage.setItem('rummikub_board_zoom', savedStorageZoom);
-                else localStorage.removeItem('rummikub_board_zoom');
-                if (savedStorageMode !== null) localStorage.setItem('rummikub_zoom_mode', savedStorageMode);
-                else localStorage.removeItem('rummikub_zoom_mode');
+                if (savedStorageBias !== null) localStorage.setItem('rummikub_zoom_bias', savedStorageBias);
+                else localStorage.removeItem('rummikub_zoom_bias');
             }
         });
 
-        await runTestCase("Zoom : avec pointerState.isDragging = true, scheduleAutoFit ne change pas le zoom et met autoFitDeferred à true", async () => {
+        await runTestCase("Zoom : avec pointerState.isDragging = true, scheduleAutoFit ne change pas la taille et met autoFitDeferred à true", async () => {
             const savedMode = zoomMode;
             const savedZoom = currentBoardZoom;
             const savedDragging = pointerState.isDragging;
@@ -16817,7 +16834,7 @@
             const savedPending = autoFitPending;
             try {
                 setZoomMode('auto');
-                applyBoardZoom(1.0, { persist: false });
+                const wBefore = appliedTileW;
                 pointerState.isDragging = true;
                 autoFitDeferred = false;
                 autoFitPending = false;
@@ -16825,9 +16842,9 @@
                 scheduleAutoFit();
                 await new Promise(r => requestAnimationFrame(r));
 
-                assert(currentBoardZoom === 1.0, `currentBoardZoom ne doit pas changer (attendu 1.0, obtenu ${currentBoardZoom})`);
+                assert(appliedTileW === wBefore, "appliedTileW ne doit pas changer pendant un drag");
                 assert(autoFitDeferred === true, "autoFitDeferred doit valoir true après scheduleAutoFit pendant le drag");
-                return "Zoom inchangé à 1.0 et autoFitDeferred passé à true après rAF";
+                return "appliedTileW inchangé et autoFitDeferred passé à true après rAF";
             } finally {
                 pointerState.isDragging = savedDragging;
                 autoFitDeferred = savedDeferred;
@@ -16837,7 +16854,7 @@
             }
         });
 
-        await runTestCase("Zoom : avec 12 combinaisons et plateau à 360 × 400 px, computeFitZoom < 1 et boardFits ou zoom 0.6", () => {
+        await runTestCase("Zoom : avec 12 combinaisons et plateau à 360 × 400 px, computeAutoTileWidth < max et pas de débordement horizontal", () => {
             const board = document.getElementById('board-container');
             assert(board !== null, "#board-container doit exister");
             const savedBoard = cloneRows(boardRows);
@@ -16866,11 +16883,12 @@
                 board.style.maxHeight = '400px';
                 updateUI();
 
-                const fitZ = computeFitZoom();
-                assert(fitZ < 1, `computeFitZoom attendu < 1, obtenu ${fitZ}`);
-                applyBoardZoom(fitZ, { persist: false });
-                assert(boardFits(board) === true || fitZ === 0.6, `boardFits(board) attendu true ou fitZ === 0.6, obtenu fits=${boardFits(board)}, fitZ=${fitZ}`);
-                return `computeFitZoom = ${fitZ} (< 1) et boardFits === ${boardFits(board)}`;
+                const bounds = getZoomBounds();
+                const autoW = computeAutoTileWidth();
+                assert(autoW < bounds.max, `computeAutoTileWidth attendu < ${bounds.max}, obtenu ${autoW}`);
+                applyTileWidth(autoW);
+                assert(board.scrollWidth <= board.clientWidth + 1, `Débordement horizontal : scrollWidth=${board.scrollWidth} > clientWidth=${board.clientWidth}`);
+                return `computeAutoTileWidth = ${autoW}px (< max ${bounds.max}px) et pas de débordement horizontal`;
             } finally {
                 board.style.width = savedW;
                 board.style.height = savedH;
@@ -16883,20 +16901,23 @@
             }
         });
 
-        await runTestCase("Zoom : l'affichage de la valeur #board-zoom-val indique 'Auto' en mode auto", () => {
+        await runTestCase("Zoom : l'affichage de la valeur #board-zoom-val indique 'Auto' en mode auto avec biais 1", () => {
             const savedMode = zoomMode;
             const savedZoom = currentBoardZoom;
             try {
                 setZoomMode('auto');
-                applyBoardZoom(0.85, { persist: false });
+                applyBoardZoom(1, { persist: false });
                 const valEl = document.getElementById('board-zoom-val');
                 assert(valEl !== null, "#board-zoom-val doit exister");
-                assert(valEl.textContent === 'Auto', `En mode auto, #board-zoom-val attendu 'Auto', obtenu '${valEl.textContent}'`);
+                assert(valEl.textContent === 'Auto', `En mode auto avec biais 1, #board-zoom-val attendu 'Auto', obtenu '${valEl.textContent}'`);
+
+                applyBoardZoom(0.85, { persist: false });
+                assert(valEl.textContent === '85%', `En mode auto avec biais != 1, attendu '85%', obtenu '${valEl.textContent}'`);
 
                 setZoomMode('manual');
-                applyBoardZoom(0.85, { persist: false });
-                assert(valEl.textContent === '85%', `En mode manual, #board-zoom-val attendu '85%', obtenu '${valEl.textContent}'`);
-                return "#board-zoom-val affiche 'Auto' en mode auto et '85%' en mode manual";
+                applyBoardZoom(1, { persist: false });
+                assert(valEl.textContent === '100%', `En mode manual avec biais 1, attendu '100%', obtenu '${valEl.textContent}'`);
+                return "#board-zoom-val affiche 'Auto' en mode auto avec biais 1 et '<pct>%' sinon";
             } finally {
                 setZoomMode(savedMode);
                 applyBoardZoom(savedZoom, { persist: false });
@@ -18338,6 +18359,143 @@
             } finally { closeHelpModal(); if (savedSeen !== null) localStorage.setItem('rummikub_help_seen', savedSeen); else localStorage.removeItem('rummikub_help_seen'); tileAssertSilenced = false; }
         });
 
+        await runTestCase("Zoom : decideTileWidth (fonction pure)", () => {
+            const bounds = { max: 48, comfort: 34, hardMin: 28 };
+            assert(decideTileWidth([{ w: 48, wraps: false, overflowY: false }], bounds) === 48, "48 sans wrap ni overflowY -> 48");
+            assert(decideTileWidth([{ w: 48, wraps: false, overflowY: true }, { w: 46, wraps: false, overflowY: false }], bounds) === 46, "Premier palier sans débordement -> 46");
+
+            const samplesOverflow = [];
+            for (let w = 48; w >= 28; w -= 2) {
+                samplesOverflow.push({ w, wraps: false, overflowY: true });
+            }
+            assert(decideTileWidth(samplesOverflow, bounds) === 34, "Tous avec overflowY sans wraps -> comfort 34");
+
+            const samplesWraps = [];
+            for (let w = 48; w >= 28; w -= 2) {
+                samplesWraps.push({ w, wraps: true, overflowY: true });
+            }
+            assert(decideTileWidth(samplesWraps, bounds) === 28, "Tous avec wraps -> hardMin 28");
+
+            const samplesPartial = [
+                { w: 34, wraps: true, overflowY: true },
+                { w: 32, wraps: true, overflowY: true },
+                { w: 30, wraps: false, overflowY: true },
+                { w: 28, wraps: false, overflowY: true }
+            ];
+            assert(decideTileWidth(samplesPartial, bounds) === 30, "34 et 32 wraps, 30 sans wrap -> 30");
+            return "decideTileWidth vérifié sur les 5 configurations";
+        });
+
+        await runTestCase("Zoom : aucune barre horizontale avec une suite de 13 tuiles à 360 px", async () => {
+            const board = document.getElementById('board-container');
+            if (!board) return "DOM non disponible";
+            const savedBoard = cloneRows(boardRows);
+            const savedW = board.style.width;
+            const wasNarrow = board.classList.contains('board-narrow');
+            const savedZoom = currentBoardZoom;
+            const savedMode = zoomMode;
+            try {
+                tileAssertSilenced = true;
+                setZoomMode('auto');
+                boardRows = [{
+                    id: 8801,
+                    type: 'run',
+                    tiles: Array.from({ length: 13 }, (_, i) => ({ id: 8810 + i, value: i + 1, color: 'red', isJoker: false }))
+                }];
+                board.style.width = '360px';
+                board.classList.add('board-narrow');
+                updateUI();
+                await fitBoardZoom();
+
+                assert(board.scrollWidth <= board.clientWidth + 1, `Débordement plateau : scrollWidth=${board.scrollWidth} > clientWidth=${board.clientWidth}`);
+                const rowEl = board.querySelector('.meld-row');
+                assert(rowEl !== null, ".meld-row introuvable");
+                assert(rowEl.scrollWidth <= rowEl.clientWidth + 1, `Débordement rangée : scrollWidth=${rowEl.scrollWidth} > clientWidth=${rowEl.clientWidth}`);
+                return "scrollWidth <= clientWidth + 1 pour le plateau et la rangée de 13 tuiles";
+            } finally {
+                board.style.width = savedW;
+                board.classList.toggle('board-narrow', wasNarrow);
+                boardRows = savedBoard;
+                setZoomMode(savedMode);
+                applyBoardZoom(savedZoom, { persist: false });
+                tileAssertSilenced = false;
+                updateUI();
+            }
+        });
+
+        await runTestCase("Zoom : ligne incomplète de même hauteur qu'une ligne complète", () => {
+            const board = document.getElementById('board-container');
+            if (!board) return "DOM non disponible";
+            const savedBoard = cloneRows(boardRows);
+            try {
+                tileAssertSilenced = true;
+                boardRows = [
+                    { id: 8821, type: 'run', tiles: [{ id: 8831, value: 1, color: 'blue', isJoker: false }, { id: 8832, value: 2, color: 'blue', isJoker: false }] },
+                    { id: 8822, type: 'run', tiles: [{ id: 8833, value: 5, color: 'red', isJoker: false }, { id: 8834, value: 6, color: 'red', isJoker: false }, { id: 8835, value: 7, color: 'red', isJoker: false }] }
+                ];
+                updateUI();
+                const rows = board.querySelectorAll('.meld-row');
+                assert(rows.length === 2, `2 rangées attendues, trouvé ${rows.length}`);
+                const diff = Math.abs(rows[0].offsetHeight - rows[1].offsetHeight);
+                assert(diff <= 2, `Écart de hauteur <= 2px attendu, obtenu ${diff}px (${rows[0].offsetHeight} vs ${rows[1].offsetHeight})`);
+                return `Hauteurs conformes (${rows[0].offsetHeight}px vs ${rows[1].offsetHeight}px, diff=${diff}px)`;
+            } finally {
+                boardRows = savedBoard;
+                tileAssertSilenced = false;
+                updateUI();
+            }
+        });
+
+        await runTestCase("Zoom : ajustement après une pause pendant le tour du joueur", async () => {
+            const board = document.getElementById('board-container');
+            if (!board) return "DOM non disponible";
+            const savedState = gameState;
+            const savedMode = zoomMode;
+            const savedZoom = currentBoardZoom;
+            const savedBoard = cloneRows(boardRows);
+            const savedH = board.style.height;
+            const savedMaxH = board.style.maxHeight;
+            const savedW = board.style.width;
+            const wasNarrow = board.classList.contains('board-narrow');
+            try {
+                tileAssertSilenced = true;
+                gameState = 'PLAYER_TURN';
+                setZoomMode('auto');
+                applyBoardZoom(1, { persist: false });
+                board.style.width = '360px';
+                board.classList.add('board-narrow');
+                board.style.height = '300px';
+                board.style.maxHeight = '300px';
+                boardRows = [{ id: 8840, type: 'run', tiles: [{ id: 8850, value: 1, color: 'blue', isJoker: false }, { id: 8851, value: 2, color: 'blue', isJoker: false }, { id: 8852, value: 3, color: 'blue', isJoker: false }] }];
+                updateUI();
+                await fitBoardZoom();
+                const wBefore = appliedTileW;
+
+                for (let r = 1; r <= 11; r++) {
+                    boardRows.push({ id: 8840 + r, type: 'run', tiles: [{ id: 8850 + r * 3, value: 1, color: 'red', isJoker: false }, { id: 8851 + r * 3, value: 2, color: 'red', isJoker: false }, { id: 8852 + r * 3, value: 3, color: 'red', isJoker: false }] });
+                }
+                updateUI();
+                scheduleAutoFit();
+                assert(appliedTileW === wBefore, `appliedTileW doit être inchangé immédiatement (attendu ${wBefore}, obtenu ${appliedTileW})`);
+
+                await new Promise(r => setTimeout(r, 900));
+                assert(appliedTileW < wBefore, `appliedTileW doit diminuer après la pause (avant: ${wBefore}, après: ${appliedTileW})`);
+                return `Ajustement temporisé vérifié : ${wBefore}px immédiatement -> ${appliedTileW}px après la pause`;
+            } finally {
+                clearTimeout(zoomIdleTimer);
+                board.style.height = savedH;
+                board.style.maxHeight = savedMaxH;
+                board.style.width = savedW;
+                board.classList.toggle('board-narrow', wasNarrow);
+                gameState = savedState;
+                setZoomMode(savedMode);
+                applyBoardZoom(savedZoom, { persist: false });
+                boardRows = savedBoard;
+                tileAssertSilenced = false;
+                updateUI();
+            }
+        });
+
         await runTestCase("Garde-fou : aucune fenêtre plein écran laissée ouverte par les tests", () => {
             const goOverlay = document.getElementById('game-over-overlay');
             const starterOverlay = document.getElementById('starter-draw-overlay');
@@ -18613,7 +18771,7 @@
                     const width = entry.contentRect ? entry.contentRect.width : board.clientWidth;
                     board.classList.toggle('board-narrow', width < 720);
                 }
-                scheduleAutoFit({ allowGrow: true });
+                scheduleAutoFit();
             });
             boardResizeObserver.observe(board);
         }
