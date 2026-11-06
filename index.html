@@ -7007,11 +7007,22 @@
         return tiles.length > 1 && tiles[tiles.length - 1].offsetTop > tiles[0].offsetTop + 2;
     }
 
+    // Débordement vertical mesuré sur les combinaisons réellement affichées,
+    // et non sur scrollHeight (qui compte le min-height de la zone des combinaisons).
+    function boardContentOverflows(board, rows) {
+        if (!rows.length) return false;
+        const boardTop = board.getBoundingClientRect().top;
+        let bottom = 0;
+        for (const r of rows) bottom = Math.max(bottom, r.getBoundingClientRect().bottom);
+        return (bottom - boardTop + board.scrollTop) > board.clientHeight + 1;
+    }
+
     function measureBoardAt(board, w) {
         board.style.setProperty('--board-tile-w', w + 'px');
+        const rows = board.querySelectorAll('.meld-row');
         let wraps = false;
-        for (const r of board.querySelectorAll('.meld-row')) { if (rowIsWrapped(r)) { wraps = true; break; } }
-        return { w, wraps, overflowY: board.scrollHeight > board.clientHeight + 1 };
+        for (const r of rows) { if (rowIsWrapped(r)) { wraps = true; break; } }
+        return { w, wraps, overflowY: boardContentOverflows(board, rows) };
     }
 
     function computeAutoTileWidth() {
