@@ -492,6 +492,7 @@
             min-height: 0;
             overflow-y: auto;
             overflow-x: hidden;
+            scroll-padding-top: 56px;
             box-shadow: inset 0 2px 10px var(--shadow-color);
         }
         .board-container.board-narrow {
@@ -526,6 +527,19 @@
             border-bottom: 1px solid var(--panel-glass-border);
             flex-wrap: nowrap;
             min-width: 0;
+            /* Barre fixe en haut du tapis pendant le défilement */
+            position: sticky;
+            top: -12px;
+            z-index: 20;
+            margin: -12px -12px 6px;
+            padding: 12px 12px 8px;
+            background: var(--surface);
+            border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+        }
+        .board-container.board-narrow .board-top-toolbar {
+            top: -4px;
+            margin: -4px -4px 4px;
+            padding: 4px 4px 6px;
         }
         .board-top-toolbar .turn-pill {
             flex: 1 1 auto;
@@ -912,7 +926,7 @@
         }
         .board-col-header {
             position: sticky;
-            top: 0;
+            top: 46px;
             z-index: 5;
             background: var(--col-header-bg);
             backdrop-filter: blur(8px);
@@ -6970,8 +6984,8 @@
     // currentBoardZoom = préférence de l'utilisateur (multiplicateur, 1 = neutre), réglée par − / +.
     const ZOOM_CFG = Object.freeze({
         maxFine: 48, maxCoarse: 44,          // taille maximale des tuiles (souris / tactile)
-        comfortMin: 34,                       // en dessous, on accepte le défilement vertical
-        hardMinFine: 28, hardMinCoarse: 30,   // minimum absolu du zoom automatique
+        comfortMin: 28,                       // en dessous, on accepte le défilement vertical
+        hardMinFine: 24, hardMinCoarse: 24,   // minimum absolu du zoom automatique
         step: 2, idleMs: 600,                 // paliers de 2 px, ajustement après 600 ms de pause
         biasMin: 0.6, biasMax: 1.3,           // plage du réglage − / +
         absMin: 20, absMax: 64, fixedW: 40    // bornes finales et taille fixe si l'auto est désactivé
