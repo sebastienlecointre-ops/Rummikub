@@ -1,7 +1,8 @@
-// Service worker Rummikub : la version est transmise par la page (sw.js?v=...)
+// Service worker du jeu : la version est transmise par la page (sw.js?v=...)
+// Le préfixe de cache 'rummikub-' est conservé volontairement (nom interne invisible) pour nettoyer les anciennes versions.
 const VERSION = new URL(self.location).searchParams.get('v') || 'dev';
 const CACHE = 'rummikub-' + VERSION;
-const PRECACHE = ['./index.html', './manifest.json', './icon-192.png', './icon-512.png'];
+const PRECACHE = ['./index.html', './manifest.json', './manifest-en.json', './manifest-es.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
   // Passage depuis l'ancienne page (enregistrée sans ?v=) : on prend la main tout de suite

@@ -1,7 +1,11 @@
 {
-  "name": "Rami de Tuiles Solo",
-  "short_name": "Rami de Tuiles Solo",
+  "id": "./index.html",
+  "name": "Rami des Tuiles – Solo",
+  "short_name": "Rami Tuiles",
+  "description": "Jeu de rami de tuiles en solo contre l'IA",
+  "lang": "fr",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#072013",
   "theme_color": "#0e3d24",
