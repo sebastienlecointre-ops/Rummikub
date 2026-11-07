@@ -1,6 +1,6 @@
 {
-  "name": "Rummikub",
-  "short_name": "Rummikub",
+  "name": "Rami de Tuiles Solo",
+  "short_name": "Rami de Tuiles Solo",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#072013",
