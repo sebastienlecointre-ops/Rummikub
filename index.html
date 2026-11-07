@@ -5127,6 +5127,7 @@
 
     function getAiBudget(level, tableTileCount, opponentHandCount) {
         if (level === 'facile') return 300;
+        if (tableTileCount >= 60) return level === 'normal' ? 4500 : 7000;
         const isLate = (tableTileCount >= 40 || opponentHandCount <= 5);
         const isMid = (tableTileCount >= 20 && tableTileCount < 40);
         if (level === 'normal') {
@@ -5285,6 +5286,486 @@
             const m = MELD_CATALOG[i];
             for (let t of m.types) CATALOG_BY_TYPE[t].push(i);
             CATALOG_BY_MIN_TYPE[m.minType].push(i);
+        }
+
+        // ===== PROGRAMMATION DYNAMIQUE PAR VALEUR (solveByValueDP) =====
+        const DP_PAIR_TO_IDX = [
+            [0, 1, 2, 3],
+            [1, 4, 5, 6],
+            [2, 5, 7, 8],
+            [3, 6, 8, 9]
+        ];
+        const DP_IDX_TO_PAIR = [
+            [0, 0], [0, 1], [0, 2], [0, 3],
+            [1, 1], [1, 2], [1, 3],
+            [2, 2], [2, 3],
+            [3, 3]
+        ];
+
+        const DP_COLOR_TRANSITIONS = (function() {
+            const table = Array.from({ length: 10 }, () => []);
+            for (let idx = 0; idx < 10; idx++) {
+                const [l0, l1] = DP_IDX_TO_PAIR[idx];
+                const choices0 = [];
+                if (l0 === 0) {
+                    choices0.push({ take: 0, nextL: 0, act: 'idle' });
+                    choices0.push({ take: 1, nextL: 1, act: 'start' });
+                } else if (l0 === 1) {
+                    choices0.push({ take: 1, nextL: 2, act: 'extend' });
+                } else if (l0 === 2) {
+                    choices0.push({ take: 1, nextL: 3, act: 'extend' });
+                } else if (l0 === 3) {
+                    choices0.push({ take: 0, nextL: 0, act: 'close' });
+                    choices0.push({ take: 1, nextL: 3, act: 'extend' });
+                    choices0.push({ take: 1, nextL: 1, act: 'restart' });
+                }
+
+                const choices1 = [];
+                if (l1 === 0) {
+                    choices1.push({ take: 0, nextL: 0, act: 'idle' });
+                    choices1.push({ take: 1, nextL: 1, act: 'start' });
+                } else if (l1 === 1) {
+                    choices1.push({ take: 1, nextL: 2, act: 'extend' });
+                } else if (l1 === 2) {
+                    choices1.push({ take: 1, nextL: 3, act: 'extend' });
+                } else if (l1 === 3) {
+                    choices1.push({ take: 0, nextL: 0, act: 'close' });
+                    choices1.push({ take: 1, nextL: 3, act: 'extend' });
+                    choices1.push({ take: 1, nextL: 1, act: 'restart' });
+                }
+
+                const seen = new Set();
+                for (const c0 of choices0) {
+                    for (const c1 of choices1) {
+                        const take = c0.take + c1.take;
+                        const nextPairIdx = DP_PAIR_TO_IDX[c0.nextL][c1.nextL];
+                        const sig = take + ':' + nextPairIdx + ':' + c0.act + ':' + c1.act;
+                        if (!seen.has(sig)) {
+                            seen.add(sig);
+                            table[idx].push({
+                                take,
+                                nextIdx: nextPairIdx,
+                                act0: c0.act,
+                                act1: c1.act,
+                                nextL0: c0.nextL,
+                                nextL1: c1.nextL
+                            });
+                        }
+                    }
+                }
+            }
+            return table;
+        })();
+
+        function enumerateGroupFormations(remT, remH, maxJokers) {
+            const formationsByJ = new Map();
+            const sumT = remT[0] + remT[1] + remT[2] + remT[3];
+
+            // 0 groupe
+            if (sumT === 0) {
+                formationsByJ.set(0, { handRealUsed: 0, jokersUsed: 0, groups: [] });
+            }
+
+            // 1 groupe
+            for (let mask = 1; mask < 16; mask++) {
+                const colors = [];
+                for (let c = 0; c < 4; c++) {
+                    if ((mask & (1 << c)) && (remT[c] + remH[c] > 0)) colors.push(c);
+                }
+                for (const size of [3, 4]) {
+                    const jokers = size - colors.length;
+                    if (jokers < 0 || jokers > maxJokers) continue;
+
+                    let coversAllTable = true;
+                    let handReal = 0;
+                    const fromTable = [false, false, false, false];
+                    const fromHand = [false, false, false, false];
+
+                    for (let c = 0; c < 4; c++) {
+                        const inGrp = colors.includes(c);
+                        const tUsed = inGrp && remT[c] > 0 ? 1 : 0;
+                        const hUsed = inGrp && remT[c] === 0 ? 1 : 0;
+                        if (tUsed) fromTable[c] = true;
+                        if (hUsed) { fromHand[c] = true; handReal++; }
+                        if (remT[c] - tUsed > 0) { coversAllTable = false; break; }
+                    }
+                    if (!coversAllTable) continue;
+
+                    const existing = formationsByJ.get(jokers);
+                    if (!existing || handReal > existing.handRealUsed) {
+                        formationsByJ.set(jokers, {
+                            handRealUsed: handReal,
+                            jokersUsed: jokers,
+                            groups: [{ colors, fromTable, fromHand, jokers }]
+                        });
+                    }
+                }
+            }
+
+            // 2 groupes
+            for (let mask1 = 1; mask1 < 16; mask1++) {
+                for (let mask2 = mask1; mask2 < 16; mask2++) {
+                    const c1 = [], c2 = [];
+                    for (let c = 0; c < 4; c++) {
+                        if (mask1 & (1 << c)) c1.push(c);
+                        if (mask2 & (1 << c)) c2.push(c);
+                    }
+                    for (const s1 of [3, 4]) {
+                        const j1 = s1 - c1.length;
+                        if (j1 < 0) continue;
+                        for (const s2 of [3, 4]) {
+                            const j2 = s2 - c2.length;
+                            if (j2 < 0) continue;
+                            const totJ = j1 + j2;
+                            if (totJ > maxJokers) continue;
+
+                            let ok = true;
+                            let handReal = 0;
+                            const ft1 = [false, false, false, false], fh1 = [false, false, false, false];
+                            const ft2 = [false, false, false, false], fh2 = [false, false, false, false];
+
+                            for (let c = 0; c < 4; c++) {
+                                const req = (c1.includes(c) ? 1 : 0) + (c2.includes(c) ? 1 : 0);
+                                if (req > remT[c] + remH[c]) { ok = false; break; }
+                                let tAvail = remT[c], hAvail = remH[c];
+                                if (c1.includes(c)) {
+                                    if (tAvail > 0) { ft1[c] = true; tAvail--; }
+                                    else { fh1[c] = true; hAvail--; handReal++; }
+                                }
+                                if (c2.includes(c)) {
+                                    if (tAvail > 0) { ft2[c] = true; tAvail--; }
+                                    else { fh2[c] = true; hAvail--; handReal++; }
+                                }
+                                if (tAvail > 0) { ok = false; break; }
+                            }
+                            if (!ok) continue;
+
+                            const existing = formationsByJ.get(totJ);
+                            if (!existing || handReal > existing.handRealUsed) {
+                                formationsByJ.set(totJ, {
+                                    handRealUsed: handReal,
+                                    jokersUsed: totJ,
+                                    groups: [
+                                        { colors: c1, fromTable: ft1, fromHand: fh1, jokers: j1 },
+                                        { colors: c2, fromTable: ft2, fromHand: fh2, jokers: j2 }
+                                    ]
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            return Array.from(formationsByJ.values());
+        }
+
+        function solveByValueDP(handCounts, tableCounts, options = {}) {
+            const deadline = options.deadline || 0;
+            let totalTableTiles = 0;
+            for (let i = 0; i < 53; i++) totalTableTiles += (tableCounts[i] || 0);
+
+            const initTj = tableCounts[TILE_TYPE_JOKER] || 0;
+            const initHj = handCounts[TILE_TYPE_JOKER] || 0;
+            const initJokerKey = initTj * 3 + initHj;
+            const initKey = initJokerKey * 10000 + 0;
+
+            let currentLayer = new Map();
+            currentLayer.set(initKey, { score: 0, prevKey: null });
+            const layerHistory = new Array(14);
+            layerHistory[0] = currentLayer;
+
+            for (let v = 1; v <= 13; v++) {
+                if (deadline && Date.now() > deadline) {
+                    return { maxPlaced: 0, score: 0, chosenMelds: [], handJokers: 0, timedOut: true, valueOf() { return this.maxPlaced; } };
+                }
+                const nextLayer = new Map();
+                const T = [tableCounts[v - 1] || 0, tableCounts[13 + v - 1] || 0, tableCounts[26 + v - 1] || 0, tableCounts[39 + v - 1] || 0];
+                const H = [handCounts[v - 1] || 0, handCounts[13 + v - 1] || 0, handCounts[26 + v - 1] || 0, handCounts[39 + v - 1] || 0];
+
+                for (const [key, entry] of currentLayer.entries()) {
+                    const runState = key % 10000;
+                    const jokerKey = Math.floor(key / 10000);
+                    const tjLeft = Math.floor(jokerKey / 3);
+                    const hjLeft = jokerKey % 3;
+                    const jokersAvail = tjLeft + hjLeft;
+
+                    const idx0 = runState % 10;
+                    const idx1 = Math.floor(runState / 10) % 10;
+                    const idx2 = Math.floor(runState / 100) % 10;
+                    const idx3 = Math.floor(runState / 1000);
+
+                    const tr0 = DP_COLOR_TRANSITIONS[idx0];
+                    const tr1 = DP_COLOR_TRANSITIONS[idx1];
+                    const tr2 = DP_COLOR_TRANSITIONS[idx2];
+                    const tr3 = DP_COLOR_TRANSITIONS[idx3];
+
+                    for (let i0 = 0; i0 < tr0.length; i0++) {
+                        const t0 = tr0[i0];
+                        const def0 = Math.max(0, t0.take - (T[0] + H[0]));
+                        if (def0 > jokersAvail) continue;
+
+                        for (let i1 = 0; i1 < tr1.length; i1++) {
+                            const t1 = tr1[i1];
+                            const def1 = def0 + Math.max(0, t1.take - (T[1] + H[1]));
+                            if (def1 > jokersAvail) continue;
+
+                            for (let i2 = 0; i2 < tr2.length; i2++) {
+                                const t2 = tr2[i2];
+                                const def2 = def1 + Math.max(0, t2.take - (T[2] + H[2]));
+                                if (def2 > jokersAvail) continue;
+
+                                for (let i3 = 0; i3 < tr3.length; i3++) {
+                                    const t3 = tr3[i3];
+                                    const minJRuns = def2 + Math.max(0, t3.take - (T[3] + H[3]));
+                                    if (minJRuns > jokersAvail) continue;
+
+                                    const jRunOptions = [[def0, Math.max(0, t1.take - (T[1] + H[1])), Math.max(0, t2.take - (T[2] + H[2])), Math.max(0, t3.take - (T[3] + H[3]))]];
+                                    if (minJRuns < jokersAvail && jokersAvail > 0) {
+                                        const baseDef = jRunOptions[0];
+                                        for (let c = 0; c < 4; c++) {
+                                            const takeC = c === 0 ? t0.take : (c === 1 ? t1.take : (c === 2 ? t2.take : t3.take));
+                                            if (takeC > baseDef[c] && baseDef[c] < 2) {
+                                                const opt = [...baseDef];
+                                                opt[c]++;
+                                                jRunOptions.push(opt);
+                                            }
+                                        }
+                                    }
+
+                                    for (const jRun of jRunOptions) {
+                                        const totJRun = jRun[0] + jRun[1] + jRun[2] + jRun[3];
+                                        if (totJRun > jokersAvail) continue;
+
+                                        const r0 = t0.take - jRun[0], r1 = t1.take - jRun[1], r2 = t2.take - jRun[2], r3 = t3.take - jRun[3];
+                                        if (r0 > T[0] + H[0] || r1 > T[1] + H[1] || r2 > T[2] + H[2] || r3 > T[3] + H[3]) continue;
+
+                                        const tRun = [Math.min(r0, T[0]), Math.min(r1, T[1]), Math.min(r2, T[2]), Math.min(r3, T[3])];
+                                        const hRun = [r0 - tRun[0], r1 - tRun[1], r2 - tRun[2], r3 - tRun[3]];
+                                        const remT = [T[0] - tRun[0], T[1] - tRun[1], T[2] - tRun[2], T[3] - tRun[3]];
+                                        const remH = [H[0] - hRun[0], H[1] - hRun[1], H[2] - hRun[2], H[3] - hRun[3]];
+                                        const remJokers = jokersAvail - totJRun;
+
+                                        const groupForms = enumerateGroupFormations(remT, remH, remJokers);
+                                        for (const form of groupForms) {
+                                            const totJUsed = totJRun + form.jokersUsed;
+                                            const tjUsed = Math.min(totJUsed, tjLeft);
+                                            const hjUsed = totJUsed - tjUsed;
+                                            if (hjUsed > hjLeft) continue;
+
+                                            const newTjLeft = tjLeft - tjUsed;
+                                            const newHjLeft = hjLeft - hjUsed;
+                                            const handPlacedAtV = (hRun[0] + hRun[1] + hRun[2] + hRun[3]) + form.handRealUsed + hjUsed;
+                                            const totalScore = entry.score + handPlacedAtV;
+
+                                            const newRunState = t0.nextIdx + 10 * (t1.nextIdx + 10 * (t2.nextIdx + 10 * t3.nextIdx));
+                                            const newJokerKey = newTjLeft * 3 + newHjLeft;
+                                            const nextKey = newJokerKey * 10000 + newRunState;
+
+                                            const existing = nextLayer.get(nextKey);
+                                            if (!existing || existing.score < totalScore) {
+                                                nextLayer.set(nextKey, {
+                                                    score: totalScore,
+                                                    prevKey: key,
+                                                    trans: [t0, t1, t2, t3],
+                                                    jRun,
+                                                    hRun,
+                                                    tRun,
+                                                    groups: form.groups,
+                                                    tjUsed,
+                                                    hjUsed
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                layerHistory[v] = nextLayer;
+                currentLayer = nextLayer;
+                if (currentLayer.size === 0) break;
+            }
+
+            // Filtrage final à v = 13 : suites fermées ou >= 3, et 0 joker de table restant
+            let bestKey = -1;
+            let bestScore = -1;
+            if (currentLayer && currentLayer.size > 0) {
+                for (const [key, item] of currentLayer.entries()) {
+                    const runState = key % 10000;
+                    const jokerKey = Math.floor(key / 10000);
+                    const tjLeft = Math.floor(jokerKey / 3);
+                    if (tjLeft !== 0) continue;
+
+                    const i0 = runState % 10;
+                    const i1 = Math.floor(runState / 10) % 10;
+                    const i2 = Math.floor(runState / 100) % 10;
+                    const i3 = Math.floor(runState / 1000);
+                    if ((i0 !== 0 && i0 !== 3 && i0 !== 9) ||
+                        (i1 !== 0 && i1 !== 3 && i1 !== 9) ||
+                        (i2 !== 0 && i2 !== 3 && i2 !== 9) ||
+                        (i3 !== 0 && i3 !== 3 && i3 !== 9)) continue;
+
+                    if (item.score > bestScore) {
+                        bestScore = item.score;
+                        bestKey = key;
+                    }
+                }
+            }
+
+            if (bestKey === -1 || bestScore < 0) {
+                return { maxPlaced: 0, score: 0, chosenMelds: [], handJokers: 0, valueOf() { return this.maxPlaced; } };
+            }
+
+            // Reconstruction Étape 2
+            const decisions = new Array(14);
+            let currKey = bestKey;
+            for (let v = 13; v >= 1; v--) {
+                const item = layerHistory[v] ? layerHistory[v].get(currKey) : null;
+                if (!item) break;
+                decisions[v] = item;
+                currKey = item.prevKey;
+            }
+
+            const chosenMelds = [];
+            let nextMeldId = 1;
+
+            // 1. Groupes
+            for (let v = 1; v <= 13; v++) {
+                const dec = decisions[v];
+                if (!dec || !dec.groups) continue;
+                let tableJokersAvail = dec.tjUsed;
+                let handJokersAvail = dec.hjUsed;
+                for (const g of dec.groups) {
+                    const len = g.colors.length + g.jokers;
+                    const counts = new Uint8Array(53);
+                    const fromTable = new Uint8Array(53);
+                    const fromHand = new Uint8Array(53);
+                    const types = [];
+                    for (const c of g.colors) {
+                        const t = c * 13 + (v - 1);
+                        counts[t]++;
+                        types.push(t);
+                        if (g.fromTable[c]) fromTable[t]++;
+                        else fromHand[t]++;
+                    }
+                    let jNeeded = g.jokers;
+                    const jTable = Math.min(jNeeded, tableJokersAvail);
+                    const jHand = jNeeded - jTable;
+                    tableJokersAvail -= jTable;
+                    handJokersAvail -= jHand;
+                    if (jNeeded > 0) {
+                        counts[TILE_TYPE_JOKER] = jNeeded;
+                        types.push(TILE_TYPE_JOKER);
+                        fromTable[TILE_TYPE_JOKER] = jTable;
+                        fromHand[TILE_TYPE_JOKER] = jHand;
+                    }
+                    chosenMelds.push({
+                        meld: { id: nextMeldId++, type: 'group', groupVal: v, score: v * len, length: len, counts, types, isFourTile: len === 4, jokers: jNeeded },
+                        fromTable,
+                        fromHand
+                    });
+                }
+            }
+
+            // 2. Suites
+            const activeRuns = [[null, null], [null, null], [null, null], [null, null]];
+            for (let v = 1; v <= 13; v++) {
+                const dec = decisions[v];
+                if (!dec) continue;
+                for (let c = 0; c < 4; c++) {
+                    const t = dec.trans[c];
+                    let tRem = dec.tRun[c];
+                    let hRem = dec.hRun[c];
+                    let jRem = dec.jRun[c];
+
+                    function makeTileItem() {
+                        if (tRem > 0) { tRem--; return { isJoker: false, fromTable: true }; }
+                        if (hRem > 0) { hRem--; return { isJoker: false, fromTable: false }; }
+                        if (jRem > 0) {
+                            jRem--;
+                            if (dec.tjUsed > 0) { dec.tjUsed--; return { isJoker: true, fromTable: true }; }
+                            return { isJoker: true, fromTable: false };
+                        }
+                        return { isJoker: false, fromTable: false };
+                    }
+
+                    function finishRun(runObj) {
+                        if (!runObj || runObj.tiles.length < 3) return;
+                        const len = runObj.tiles.length;
+                        const counts = new Uint8Array(53);
+                        const fromTable = new Uint8Array(53);
+                        const fromHand = new Uint8Array(53);
+                        const typesSet = new Set();
+                        let score = 0;
+                        let jokersCount = 0;
+                        for (let k = 0; k < len; k++) {
+                            const val = runObj.startVal + k;
+                            score += val;
+                            const item = runObj.tiles[k];
+                            if (item.isJoker) {
+                                jokersCount++;
+                                counts[TILE_TYPE_JOKER]++;
+                                typesSet.add(TILE_TYPE_JOKER);
+                                if (item.fromTable) fromTable[TILE_TYPE_JOKER]++;
+                                else fromHand[TILE_TYPE_JOKER]++;
+                            } else {
+                                const tp = c * 13 + (val - 1);
+                                counts[tp]++;
+                                typesSet.add(tp);
+                                if (item.fromTable) fromTable[tp]++;
+                                else fromHand[tp]++;
+                            }
+                        }
+                        chosenMelds.push({
+                            meld: { id: nextMeldId++, type: 'run', color: c, startVal: runObj.startVal, score, length: len, counts, types: Array.from(typesSet), isFourTile: len >= 4, jokers: jokersCount },
+                            fromTable,
+                            fromHand
+                        });
+                    }
+
+                    let newRun0 = null, newRun1 = null;
+                    // Slot 0
+                    if (t.act0 === 'close') { finishRun(activeRuns[c][0]); activeRuns[c][0] = null; }
+                    else if (t.act0 === 'restart') { finishRun(activeRuns[c][0]); newRun0 = { startVal: v, tiles: [makeTileItem()] }; }
+                    else if (t.act0 === 'start') { newRun0 = { startVal: v, tiles: [makeTileItem()] }; }
+                    else if (t.act0 === 'extend') { activeRuns[c][0].tiles.push(makeTileItem()); newRun0 = activeRuns[c][0]; }
+
+                    // Slot 1
+                    if (t.act1 === 'close') { finishRun(activeRuns[c][1]); activeRuns[c][1] = null; }
+                    else if (t.act1 === 'restart') { finishRun(activeRuns[c][1]); newRun1 = { startVal: v, tiles: [makeTileItem()] }; }
+                    else if (t.act1 === 'start') { newRun1 = { startVal: v, tiles: [makeTileItem()] }; }
+                    else if (t.act1 === 'extend') { activeRuns[c][1].tiles.push(makeTileItem()); newRun1 = activeRuns[c][1]; }
+
+                    if (t.nextL0 <= t.nextL1) {
+                        activeRuns[c][0] = newRun0;
+                        activeRuns[c][1] = newRun1;
+                    } else {
+                        activeRuns[c][0] = newRun1;
+                        activeRuns[c][1] = newRun0;
+                    }
+
+                    if (v === 13) {
+                        finishRun(activeRuns[c][0]);
+                        finishRun(activeRuns[c][1]);
+                        activeRuns[c][0] = null;
+                        activeRuns[c][1] = null;
+                    }
+                }
+            }
+
+            let handJokers = 0;
+            for (const cm of chosenMelds) {
+                handJokers += (cm.fromHand[TILE_TYPE_JOKER] || 0);
+            }
+
+            return {
+                maxPlaced: bestScore,
+                score: bestScore,
+                chosenMelds,
+                handJokers,
+                valueOf() { return this.maxPlaced; }
+            };
         }
 
         function mergeContiguousRuns(chosenMelds) {
@@ -5639,105 +6120,7 @@
                     });
                 }
 
-                // G4 : Récupération du joker
-                for (let r = 0; r < curRows.length; r++) {
-                    const R = curRows[r];
-                    const jokersInR = R.tiles.filter(t => t.isJoker);
-                    if (jokersInR.length !== 1) continue;
-                    const jTile = jokersInR[0], normals = R.tiles.filter(t => !t.isJoker);
-                    for (let i = 0; i < curHand.length; i++) {
-                        const h = curHand[i];
-                        if (h.isJoker) continue;
-                        if (R.type === 'run') {
-                            if (h.color !== normals[0].color || !isValidMeldFast([...normals, h], 'run')) continue;
-                        } else if (R.type === 'group') {
-                            if (h.value !== normals[0].value || normals.some(t => t.color === h.color) || !isValidMeldFast([...normals, h], 'group')) continue;
-                        } else continue;
-
-                        const remH = curHand.filter(t => t.id !== h.id);
-                        let rep = null;
-                        for (let a = 0; a < remH.length; a++) {
-                            for (let b = a + 1; b < remH.length; b++) {
-                                const mt = detectTypeFast([jTile, remH[a], remH[b]]);
-                                if (mt) {
-                                    const pts = h.value + handTileVal(remH[a]) + handTileVal(remH[b]);
-                                    if (!rep || pts > rep.pts) rep = { opt: 'a', h1: remH[a], h2: remH[b], mt, pts, placed: 3, usesHandJoker: remH[a].isJoker || remH[b].isJoker };
-                                }
-                            }
-                        }
-                        if (!rep) {
-                            for (let a = 0; a < remH.length; a++) {
-                                for (let f of freeTiles) {
-                                    if (f.rowId === R.id) continue;
-                                    const mt = detectTypeFast([jTile, remH[a], f.tile]);
-                                    if (mt) {
-                                        const pts = h.value + handTileVal(remH[a]);
-                                        if (!rep || pts > rep.pts) rep = { opt: 'b', h1: remH[a], f, mt, pts, placed: 2, usesHandJoker: remH[a].isJoker };
-                                    }
-                                }
-                            }
-                        }
-                        if (!rep) {
-                            for (let a = 0; a < remH.length; a++) {
-                                for (let R2 of curRows) {
-                                    if (R2.id === R.id || R2.tiles.some(t => t.isJoker)) continue;
-                                    if (isValidMeldFast([...R2.tiles, jTile, remH[a]], R2.type)) {
-                                        const pts = h.value + handTileVal(remH[a]);
-                                        if (!rep || pts > rep.pts) rep = { opt: 'c', h1: remH[a], R2, pts, placed: 2, usesHandJoker: remH[a].isJoker };
-                                    }
-                                }
-                            }
-                        }
-                        if (!rep) continue;
-                        candidates.push({
-                            placedCount: rep.placed,
-                            points: rep.pts,
-                            usesHandJoker: !!rep.usesHandJoker,
-                            execute() {
-                                curHand.splice(curHand.findIndex(t => t.id === h.id), 1);
-                                curHand.splice(curHand.findIndex(t => t.id === rep.h1.id), 1);
-                                R.tiles = R.tiles.filter(t => t.id !== jTile.id);
-                                R.tiles.push(h);
-                                if (R.type === 'run') R.tiles.sort((x, y) => x.value - y.value);
-                                allSteps.push({ action: 'place_from_hand', tileId: h.id, fromLineId: null, toLineId: R.id, type: R.type, label: 'Remplacement joker' });
-                                if (rep.opt === 'a') {
-                                    curHand.splice(curHand.findIndex(t => t.id === rep.h2.id), 1);
-                                    const nId = nextRowId(), nt = [jTile, rep.h1, rep.h2];
-                                    if (rep.mt === 'run') nt.sort((x, y) => x.value - y.value);
-                                    curRows.push({ id: nId, type: rep.mt, tiles: nt });
-                                    allSteps.push({ action: 'move_from_board_to_line', tileId: jTile.id, fromLineId: R.id, toLineId: nId, type: rep.mt, label: 'Déplacement joker' });
-                                    allSteps.push({ action: 'place_from_hand', tileId: rep.h1.id, fromLineId: null, toLineId: nId, type: rep.mt, label: 'Nouveau meld' });
-                                    allSteps.push({ action: 'place_from_hand', tileId: rep.h2.id, fromLineId: null, toLineId: nId, type: rep.mt, label: 'Nouveau meld' });
-                                } else if (rep.opt === 'b') {
-                                    const f = rep.f;
-                                    const fR = curRows.find(rf => rf.id === f.rowId);
-                                    if (f.kind === 'mid') {
-                                        const splitRowId = nextRowId();
-                                        const toMove = fR.tiles.filter(t => t.value > f.tile.value).sort((x, y) => x.value - y.value);
-                                        fR.tiles = fR.tiles.filter(t => t.value < f.tile.value);
-                                        curRows.push({ id: splitRowId, type: 'run', tiles: toMove });
-                                        for (const m of toMove) allSteps.push({ action: 'move_from_board_to_line', tileId: m.id, fromLineId: fR.id, toLineId: splitRowId, type: 'run', label: 'Scission suite' });
-                                    } else {
-                                        fR.tiles = fR.tiles.filter(t => t.id !== f.tile.id);
-                                    }
-                                    const nId = nextRowId(), nt = [jTile, rep.h1, f.tile];
-                                    if (rep.mt === 'run') nt.sort((x, y) => x.value - y.value);
-                                    curRows.push({ id: nId, type: rep.mt, tiles: nt });
-                                    allSteps.push({ action: 'move_from_board_to_line', tileId: jTile.id, fromLineId: R.id, toLineId: nId, type: rep.mt, label: 'Déplacement joker' });
-                                    allSteps.push({ action: 'place_from_hand', tileId: rep.h1.id, fromLineId: null, toLineId: nId, type: rep.mt, label: 'Nouveau meld' });
-                                    allSteps.push({ action: 'move_from_board_to_line', tileId: f.tile.id, fromLineId: f.rowId, toLineId: nId, type: rep.mt, label: 'Extraction tuile' });
-                                } else if (rep.opt === 'c') {
-                                    rep.R2.tiles.push(rep.h1, jTile);
-                                    allSteps.push({ action: 'place_from_hand', tileId: rep.h1.id, fromLineId: null, toLineId: rep.R2.id, type: rep.R2.type, label: 'Ajout' });
-                                    allSteps.push({ action: 'move_from_board_to_line', tileId: jTile.id, fromLineId: R.id, toLineId: rep.R2.id, type: rep.R2.type, label: 'Déplacement joker' });
-                                }
-                            }
-                        });
-                    }
-                }
-
                 // G3 : énumération des extractions
-
                 for (let i = 0; i < curHand.length; i++) {
                     for (let j = i + 1; j < curHand.length; j++) {
                         for (let k = 0; k < freeTiles.length; k++) addG3([curHand[i], curHand[j]], [freeTiles[k]]);
@@ -5750,6 +6133,143 @@
                         }
                     }
                 }
+
+                // G-joker : Récupération et réutilisation immédiate du joker (R11)
+                for (let r = 0; r < curRows.length; r++) {
+                    const R = curRows[r];
+                    const jokersInR = R.tiles.filter(t => t.isJoker);
+                    if (jokersInR.length !== 1) continue;
+                    const jTile = jokersInR[0], normals = R.tiles.filter(t => !t.isJoker);
+                    if (normals.length < 2) continue;
+
+                    // Calcul des tuiles exactes que le joker représente dans R
+                    const repTiles = [];
+                    if (R.type === 'group') {
+                        const val = normals[0].value;
+                        if (normals.every(t => t.value === val)) {
+                            const usedCols = new Set(normals.map(t => t.color));
+                            for (const c of COLORS) {
+                                if (!usedCols.has(c)) repTiles.push({ value: val, color: c });
+                            }
+                        }
+                    } else if (R.type === 'run') {
+                        const col = normals[0].color;
+                        if (normals.every(t => t.color === col)) {
+                            const vals = normals.map(t => t.value).sort((a, b) => a - b);
+                            const L = R.tiles.length;
+                            for (let s = Math.max(1, vals[vals.length - 1] - L + 1); s <= Math.min(vals[0], 14 - L); s++) {
+                                const expected = [];
+                                for (let v = s; v < s + L; v++) expected.push(v);
+                                const missing = expected.filter(v => !vals.includes(v));
+                                if (missing.length === 1) repTiles.push({ value: missing[0], color: col });
+                            }
+                        }
+                    }
+                    if (repTiles.length === 0) continue;
+
+                    for (const rt of repTiles) {
+                        const hIdx = curHand.findIndex(t => !t.isJoker && t.value === rt.value && t.color === rt.color);
+                        if (hIdx === -1) continue;
+                        const h = curHand[hIdx];
+                        const remH = curHand.filter(t => t.id !== h.id);
+
+                        // b.1) Dans une nouvelle combinaison avec au moins 2 tuiles de la main
+                        for (let a = 0; a < remH.length; a++) {
+                            for (let b = a + 1; b < remH.length; b++) {
+                                const h1 = remH[a], h2 = remH[b];
+                                const mt = detectTypeFast([jTile, h1, h2]);
+                                if (!mt) continue;
+                                candidates.push({
+                                    placedCount: 3,
+                                    points: h.value + handTileVal(h1) + handTileVal(h2),
+                                    usesHandJoker: !!(h1.isJoker || h2.isJoker),
+                                    execute() {
+                                        curHand.splice(curHand.findIndex(t => t.id === h.id), 1);
+                                        curHand.splice(curHand.findIndex(t => t.id === h1.id), 1);
+                                        curHand.splice(curHand.findIndex(t => t.id === h2.id), 1);
+                                        R.tiles = R.tiles.filter(t => t.id !== jTile.id);
+                                        R.tiles.push(h);
+                                        if (R.type === 'run') R.tiles.sort((x, y) => x.value - y.value);
+                                        allSteps.push({ action: 'place_from_hand', tileId: h.id, fromLineId: null, toLineId: R.id, type: R.type, label: 'Remplacement joker' });
+                                        const nId = nextRowId(), nt = [jTile, h1, h2];
+                                        if (mt === 'run') nt.sort((x, y) => (x.isJoker ? 0 : x.value) - (y.isJoker ? 0 : y.value));
+                                        curRows.push({ id: nId, type: mt, tiles: nt });
+                                        allSteps.push({ action: 'move_from_board_to_line', tileId: jTile.id, fromLineId: R.id, toLineId: nId, type: mt, label: 'Déplacement joker' });
+                                        allSteps.push({ action: 'place_from_hand', tileId: h1.id, fromLineId: null, toLineId: nId, type: mt, label: 'Nouveau meld' });
+                                        allSteps.push({ action: 'place_from_hand', tileId: h2.id, fromLineId: null, toLineId: nId, type: mt, label: 'Nouveau meld' });
+                                    }
+                                });
+                            }
+                        }
+
+                        // b.2) Dans une autre rangée valide existante avec 1 tuile de la main
+                        for (let a = 0; a < remH.length; a++) {
+                            const h1 = remH[a];
+                            for (let R2 of curRows) {
+                                if (R2.id === R.id || R2.tiles.some(t => t.isJoker)) continue;
+                                if (isValidMeldFast([...R2.tiles, jTile, h1], R2.type)) {
+                                    candidates.push({
+                                        placedCount: 2,
+                                        points: h.value + handTileVal(h1),
+                                        usesHandJoker: !!h1.isJoker,
+                                        execute() {
+                                            curHand.splice(curHand.findIndex(t => t.id === h.id), 1);
+                                            curHand.splice(curHand.findIndex(t => t.id === h1.id), 1);
+                                            R.tiles = R.tiles.filter(t => t.id !== jTile.id);
+                                            R.tiles.push(h);
+                                            if (R.type === 'run') R.tiles.sort((x, y) => x.value - y.value);
+                                            allSteps.push({ action: 'place_from_hand', tileId: h.id, fromLineId: null, toLineId: R.id, type: R.type, label: 'Remplacement joker' });
+                                            R2.tiles.push(h1, jTile);
+                                            if (R2.type === 'run') R2.tiles.sort((x, y) => (x.isJoker ? 0 : x.value) - (y.isJoker ? 0 : y.value));
+                                            allSteps.push({ action: 'place_from_hand', tileId: h1.id, fromLineId: null, toLineId: R2.id, type: R2.type, label: 'Ajout' });
+                                            allSteps.push({ action: 'move_from_board_to_line', tileId: jTile.id, fromLineId: R.id, toLineId: R2.id, type: R2.type, label: 'Déplacement joker' });
+                                        }
+                                    });
+                                }
+                            }
+                        }
+
+                        // b.3) Dans une nouvelle combinaison avec 1 tuile de main et 1 tuile libre de la table
+                        for (let a = 0; a < remH.length; a++) {
+                            const h1 = remH[a];
+                            for (let f of freeTiles) {
+                                if (f.rowId === R.id) continue;
+                                const mt = detectTypeFast([jTile, h1, f.tile]);
+                                if (!mt) continue;
+                                candidates.push({
+                                    placedCount: 2,
+                                    points: h.value + handTileVal(h1),
+                                    usesHandJoker: !!h1.isJoker,
+                                    execute() {
+                                        curHand.splice(curHand.findIndex(t => t.id === h.id), 1);
+                                        curHand.splice(curHand.findIndex(t => t.id === h1.id), 1);
+                                        R.tiles = R.tiles.filter(t => t.id !== jTile.id);
+                                        R.tiles.push(h);
+                                        if (R.type === 'run') R.tiles.sort((x, y) => x.value - y.value);
+                                        allSteps.push({ action: 'place_from_hand', tileId: h.id, fromLineId: null, toLineId: R.id, type: R.type, label: 'Remplacement joker' });
+                                        const fR = curRows.find(rf => rf.id === f.rowId);
+                                        if (f.kind === 'mid') {
+                                            const splitRowId = nextRowId();
+                                            const toMove = fR.tiles.filter(t => t.value > f.tile.value).sort((x, y) => x.value - y.value);
+                                            fR.tiles = fR.tiles.filter(t => t.value < f.tile.value);
+                                            curRows.push({ id: splitRowId, type: 'run', tiles: toMove });
+                                            for (const m of toMove) allSteps.push({ action: 'move_from_board_to_line', tileId: m.id, fromLineId: fR.id, toLineId: splitRowId, type: 'run', label: 'Scission suite' });
+                                        } else {
+                                            fR.tiles = fR.tiles.filter(t => t.id !== f.tile.id);
+                                        }
+                                        const nId = nextRowId(), nt = [jTile, h1, f.tile];
+                                        if (mt === 'run') nt.sort((x, y) => (x.isJoker ? 0 : x.value) - (y.isJoker ? 0 : y.value));
+                                        curRows.push({ id: nId, type: mt, tiles: nt });
+                                        allSteps.push({ action: 'move_from_board_to_line', tileId: jTile.id, fromLineId: R.id, toLineId: nId, type: mt, label: 'Déplacement joker' });
+                                        allSteps.push({ action: 'place_from_hand', tileId: h1.id, fromLineId: null, toLineId: nId, type: mt, label: 'Nouveau meld' });
+                                        allSteps.push({ action: 'move_from_board_to_line', tileId: f.tile.id, fromLineId: f.rowId, toLineId: nId, type: mt, label: 'Extraction tuile' });
+                                    }
+                                });
+                            }
+                        }
+                    }
+                }
+
 
                 let bestCand = null;
                 for (const c of candidates) {
@@ -5795,6 +6315,9 @@
             const budgetMs = options.budgetMs || options.timeBudget || 1500;
             const opponentHandCount = options.opponentHandCount !== undefined ? options.opponentHandCount : 14;
             const isEndGameUrgent = (opponentHandCount <= 4) || (poolCount !== null && poolCount === 0);
+            const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+            const r = Math.max(clamp((8 - opponentHandCount) / 6, 0, 1), poolCount === 0 ? 1 : clamp((20 - (poolCount ?? 30)) / 20, 0, 1));
+            const unknownCounts = options.unknownCounts ? new Uint8Array(options.unknownCounts) : null;
             const allowStrategicHolds = (aiStyle === 'strategic') && !options.forcePlay;
             const holdPossible = allowStrategicHolds && profile === 'expert' && hand.some(t => t.isJoker) && opponentHandCount >= 8 && (poolCount === null || poolCount > 10);
             const startTime = Date.now();
@@ -5948,7 +6471,18 @@
                 const tableCounts = tilesToCounts(tableTiles);
                 const tableC = new Uint8Array(tableCounts);
                 const handC = new Uint8Array(handCounts);
-                const memo = new Map();
+                const ttSize = 1 << 20;
+                const ttMask = ttSize - 1;
+                const ttKey1 = new Int32Array(ttSize);
+                const ttKey2 = new Int32Array(ttSize);
+                const ttVal = new Int16Array(ttSize).fill(-1);
+                const isContig = m => {
+                    for (let i = 0; i < chosen.length; i++) {
+                        const c = chosen[i];
+                        if (c.h === 0 && c.meld.type === 'run' && c.meld.color === m.color && (c.meld.startVal + c.meld.length === m.startVal || m.startVal + m.length === c.meld.startVal)) return true;
+                    }
+                    return false;
+                };
             const chosen = [];
             let candidateSolutions = [];
             let bestHandPlaced = 0;
@@ -5992,10 +6526,11 @@
                 if (timedOut || optimal) return;
                 if ((++nodeCount & 127) === 0 && Date.now() > deadline) { timedOut = true; return; }
                 if (placedSoFar + liveLeft < Math.max(1, bestHandPlaced - (candidateSolutions.length >= 300 ? 0 : 2))) return;
-                const memoKey = zHash1 + ':' + zHash2;
-                if (memo.has(memoKey) && memo.get(memoKey) >= placedSoFar) return;
-                if (memo.size > 300000) memo.clear();
-                memo.set(memoKey, placedSoFar);
+                const ttIdx = (zHash1 >>> 0) & ttMask;
+                if (ttKey1[ttIdx] === zHash1 && ttKey2[ttIdx] === zHash2 && ttVal[ttIdx] >= placedSoFar) return;
+                ttKey1[ttIdx] = zHash1;
+                ttKey2[ttIdx] = zHash2;
+                ttVal[ttIdx] = placedSoFar;
 
                 if (tableLeft > 0) {
                     let t = 0;
@@ -6027,9 +6562,11 @@
                                 zHash1 ^= zT[k][tableC[k] + minT][0] ^ zT[k][tableC[k]][0] ^ zH[k][handC[k] + h][0] ^ zH[k][handC[k]][0];
                                 zHash2 ^= zT[k][tableC[k] + minT][1] ^ zT[k][tableC[k]][1] ^ zH[k][handC[k] + h][1] ^ zH[k][handC[k]][1];
                             }
-                            chosen.push({ meld, d: depth });
-                            bnb(tableLeft - tTaken, liveLeft - hTaken, placedSoFar + hTaken);
-                            chosen.pop();
+                            if (!(hTaken === 0 && meld.type === 'run' && isContig(meld))) {
+                                chosen.push({ meld, d: depth, h: hTaken });
+                                bnb(tableLeft - tTaken, liveLeft - hTaken, placedSoFar + hTaken);
+                                chosen.pop();
+                            }
                             for (let j = 0; j < mLen; j++) {
                                 const k = mTypes[j], minT = curSplit[j], h = meld.counts[k] - minT;
                                 tableC[k] += minT; handC[k] += h;
@@ -6046,8 +6583,8 @@
                         function rec(idx, tTaken, hTaken, hasOther) {
                             if (timedOut || optimal) return;
                             if (idx === mLen) {
-                                if (!hasOther) return;
-                                chosen.push({ meld, d: depth });
+                                if (!hasOther || (hTaken === 0 && meld.type === 'run' && isContig(meld))) return;
+                                chosen.push({ meld, d: depth, h: hTaken });
                                 bnb(tableLeft - tTaken, liveLeft - hTaken, placedSoFar + hTaken);
                                 chosen.pop();
                                 return;
@@ -6118,7 +6655,7 @@
                     for (let k of meld.types) { if (handC[k] < meld.counts[k]) { can = false; break; } }
                     if (!can) continue;
                     for (let k of meld.types) handC[k] -= meld.counts[k];
-                    chosen.push({ meld, d: -1 });
+                    chosen.push({ meld, d: -1, h: meld.length });
                     branchHand(liveLeft - meld.length, placedSoFar + meld.length);
                     chosen.pop();
                     for (let k of meld.types) handC[k] += meld.counts[k];
@@ -6136,7 +6673,48 @@
             }
 
             let candidateSolutions = [];
-            if (!options.skipBnb) {
+            let dpCandidate = null;
+            if (!options.skipBnb && !options.skipDp && isOpened && budgetMs > 5) {
+                const ringsToTry = [];
+                if (ring1.length > 0 && ring1.length < currentBoard.length) {
+                    ringsToTry.push({ rows: ring1, phase: 1 });
+                }
+                if (ring2.length > 0 && ring2.length !== ring1.length && ring2.length < currentBoard.length) {
+                    ringsToTry.push({ rows: ring2, phase: 2 });
+                }
+                ringsToTry.push({ rows: currentBoard, phase: 3 });
+
+                for (const ringItem of ringsToTry) {
+                    const subsetRows = ringItem.rows;
+                    const subTableCounts = tilesToCounts(subsetRows.flatMap(r => r.tiles));
+                    let dpHandCounts = handCounts;
+                    if (holdPossible) {
+                        dpHandCounts = new Uint8Array(handCounts);
+                        dpHandCounts[TILE_TYPE_JOKER] = 0;
+                    }
+
+                    const dpRes = solveByValueDP(dpHandCounts, subTableCounts, {
+                        deadline: startTime + budgetMs
+                    });
+
+                    if (dpRes && dpRes.maxPlaced > 0 && dpRes.chosenMelds && dpRes.chosenMelds.length > 0) {
+                        const dpSteps = buildStepsFromChosenMelds(dpRes.chosenMelds, hand, subsetRows);
+                        if (checkJokerRuleR11(dpSteps, currentBoard, hand, isOpened)) {
+                            dpCandidate = {
+                                cand: dpRes.chosenMelds,
+                                handPlaced: dpRes.maxPlaced,
+                                handJokers: dpRes.handJokers || 0,
+                                rowsSubset: subsetRows,
+                                phase: ringItem.phase
+                            };
+                            candidateSolutions.push(dpCandidate);
+                            if (dpRes.maxPlaced === liveHandTotal && liveHandTotal > 0) break;
+                        }
+                    }
+                }
+            }
+
+            if (!options.skipBnb && !dpCandidate) {
                 const r1 = runBnbOn(ring1, startTime + 0.4 * budgetMs);
                 for (const c of r1.candidateSolutions) candidateSolutions.push({ ...c, rowsSubset: ring1, phase: 1 });
                 if (r1.timedOut) timedOut = true;
@@ -6187,6 +6765,17 @@
                     }
                     if (hasPartner) flexibility += cnt;
                 }
+                const availCounts = new Uint8Array(53);
+                for (let t = 0; t < 53; t++) availCounts[t] = remHandCounts[t] + (unknownCounts ? unknownCounts[t] : 0);
+                let deadPoints = 0;
+                for (let t = 0; t < 53; t++) {
+                    if (remHandCounts[t] === 0) continue;
+                    let canMeld = false;
+                    for (let idx of CATALOG_BY_TYPE[t]) {
+                        if (MELD_CATALOG[idx].types.every(k => availCounts[k] >= MELD_CATALOG[idx].counts[k])) { canMeld = true; break; }
+                    }
+                    if (!canMeld) deadPoints += remHandCounts[t] * (t === TILE_TYPE_JOKER ? 30 : ((t % 13) + 1));
+                }
                 let expertScore = 0;
                 if (profile === 'expert') {
                     if (isEndGameUrgent) {
@@ -6197,20 +6786,13 @@
                         if (!hasFourTileMelds) expertScore += ScoreWeights.holdFourthTileBonus;
                     }
                 }
-                scoredCandidates.push({ cand, handPlaced, handJokers, remainingCount, remainingPoints, flexibility, expertScore, rowsSubset: item.rowsSubset, phase: item.phase });
+                const score = (1 - r) * handPlaced * 100 - r * remainingPoints * 4 - deadPoints * 2 + flexibility * 5 + expertScore;
+                scoredCandidates.push({ cand, handPlaced, handJokers, remainingCount, remainingPoints, flexibility, score, rowsSubset: item.rowsSubset, phase: item.phase });
             }
 
             scoredCandidates.sort((a, b) => {
-                if (isEndGameUrgent) {
-                    if ((a.remainingCount === 0) !== (b.remainingCount === 0)) return a.remainingCount === 0 ? -1 : 1;
-                    if (a.remainingPoints !== b.remainingPoints) return a.remainingPoints - b.remainingPoints;
-                    if (b.handPlaced !== a.handPlaced) return b.handPlaced - a.handPlaced;
-                    return b.expertScore - a.expertScore;
-                }
-                if (b.handPlaced !== a.handPlaced) return b.handPlaced - a.handPlaced;
-                if (b.flexibility !== a.flexibility) return b.flexibility - a.flexibility;
-                if (a.remainingPoints !== b.remainingPoints) return a.remainingPoints - b.remainingPoints;
-                return b.expertScore - a.expertScore;
+                if ((a.remainingCount === 0) !== (b.remainingCount === 0)) return a.remainingCount === 0 ? -1 : 1;
+                return b.score - a.score;
             });
 
             let bnbBest = null;
@@ -6222,7 +6804,7 @@
                 }
                 const steps = buildStepsFromChosenMelds(item.cand, hand, item.rowsSubset);
                 if (checkJokerRuleR11(steps, currentBoard, hand, isOpened)) {
-                    bnbBest = { steps, solutionMelds: item.cand, score: item.expertScore, handPlaced: item.handPlaced, phase: item.phase, remainingPoints: item.remainingPoints, flexibility: item.flexibility };
+                    bnbBest = { steps, solutionMelds: item.cand, score: item.score, handPlaced: item.handPlaced, phase: item.phase, remainingPoints: item.remainingPoints, flexibility: item.flexibility };
                     break;
                 } else {
                     filteredByR11++;
@@ -10124,12 +10706,19 @@
 
         // Exécution de l'IA dans le Worker
         const tableTileCount = boardRows.reduce((s, r) => s + r.tiles.length, 0);
+        const aiKnowledge = getTileKnowledge(aiHand, boardRows);
+        const unknownCounts = new Uint8Array(53);
+        COLORS.forEach((c, cIdx) => {
+            for (let v = 1; v <= 13; v++) unknownCounts[cIdx * 13 + (v - 1)] = aiKnowledge[c][v].unknown;
+        });
+        unknownCounts[52] = aiKnowledge.jokers.unknown;
         const solveRes = await requestWorkerSolve(aiHand, boardRows, aiOpened, {
             profile: aiCfg.profile,
             aiStyle: aiCfg.aiStyle,
             budgetMs: getAiBudget(aiProfile, tableTileCount, playerHand.length),
             opponentHandCount: playerHand.length,
             poolCount: pool.length,
+            unknownCounts,
             holdBackCount: aiConsecutiveHoldCount,
             consecutiveMissCount: aiConsecutiveMissCount,
             randomMiss: aiCfg.profile === 'facile' ? Math.random() : undefined
@@ -18725,6 +19314,42 @@
             assert(res.liveTypes && res.liveTypes.includes(tileToType(hand[4])), "liveTypes doit contenir 10 noir");
             assert(res.liveTypes && res.liveTypes.includes(tileToType(hand[5])), "liveTypes doit contenir 11 noir");
             return "liveHandTotal === 3 et les 3 types noirs sont bien présents dans liveTypes";
+        });
+
+        await runTestCase("solveByValueDP : résolution DP par valeur (1..13), reconstruction et jokers", async () => {
+            // 1. Extension simple : Table 4-5-6 Rouge, Main 7 Rouge -> maxPlaced = 1, run 4-5-6-7
+            const hCounts1 = new Uint8Array(53);
+            const tCounts1 = new Uint8Array(53);
+            tCounts1[3] = 1; tCounts1[4] = 1; tCounts1[5] = 1; // 4, 5, 6 rouge
+            hCounts1[6] = 1; // 7 rouge
+            const res1 = solveByValueDP(hCounts1, tCounts1);
+            assert(res1.maxPlaced === 1, `Extension attendue 1, obtenu ${res1.maxPlaced}`);
+            assert(res1.chosenMelds.length === 1 && res1.chosenMelds[0].meld.length === 4, "Suite reconstruite de 4 tuiles");
+
+            // 2. Scission/insertion : Table 3-4-5-6-7 Rouge, Main 5 Rouge -> maxPlaced = 1, deux suites 3-4-5 et 5-6-7
+            const hCounts2 = new Uint8Array(53);
+            const tCounts2 = new Uint8Array(53);
+            for (let v = 3; v <= 7; v++) tCounts2[v - 1] = 1;
+            hCounts2[4] = 1; // 5 rouge
+            const res2 = solveByValueDP(hCounts2, tCounts2);
+            assert(res2.maxPlaced === 1, `Insertion attendue 1, obtenu ${res2.maxPlaced}`);
+            assert(res2.chosenMelds.length === 2 && res2.chosenMelds.every(cm => cm.meld.length === 3), "Deux suites de 3 tuiles reconstruites");
+
+            // 3. Avec Joker : Table 4-5 Bleu, Main Joker -> maxPlaced = 1, suite reconstruite avec joker
+            const hCounts3 = new Uint8Array(53);
+            const tCounts3 = new Uint8Array(53);
+            tCounts3[13 + 3] = 1; tCounts3[13 + 4] = 1; // 4, 5 bleu
+            hCounts3[52] = 1; // Joker
+            const res3 = solveByValueDP(hCounts3, tCounts3);
+            assert(res3.maxPlaced === 1, `Avec Joker attendu 1, obtenu ${res3.maxPlaced}`);
+            assert(res3.chosenMelds.length === 1 && res3.chosenMelds[0].meld.jokers === 1, "Suite de 3 avec joker");
+
+            // 4. Tuile de table non réutilisable : Table 8 Noir isolée sans possibilité de meld -> maxPlaced = 0
+            const tCounts4 = new Uint8Array(53);
+            tCounts4[39 + 7] = 1; // 8 noir
+            const res4 = solveByValueDP(new Uint8Array(53), tCounts4);
+            assert(res4.maxPlaced === 0, `Table non complétée attendu 0, obtenu ${res4.maxPlaced}`);
+            return "solveByValueDP valide les extensions, scissions, jokers et l'obligation de consommer la table";
         });
 
         await runTestCase("8.12 Badge compact sans texte de titre en mode ai-summary", () => {
