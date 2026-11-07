@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Rummikub</title>
+    <title>Rami de Tuiles Solo</title>
+	<meta name="author" content="Sébastien Lecointre">
 	<link rel="manifest" href="manifest.json">
 	<meta name="theme-color" content="#0e3d24">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1777,7 +1778,7 @@
         .mobile-drawer-overlay.active .mobile-drawer { right: 0; }
 
         /* MODALES ET OVERLAYS */
-        #game-over-overlay, #test-report-overlay, #welcome-settings-overlay, #starter-draw-overlay, #help-overlay {
+        #game-over-overlay, #test-report-overlay, #welcome-settings-overlay, #starter-draw-overlay, #help-overlay, #prefs-modal-overlay {
             display: none;
             position: fixed;
             inset: 0;
@@ -2608,6 +2609,60 @@
 			.board-tools-right { gap: 4px; }
 		}
 		.btn-zoom-step.active { color: var(--accent-gold); }
+        /* ===== Boutons ronds de la barre du haut : Aide / Réglages / Analyse ===== */
+        .btn-nav-round {
+            width: 36px;
+            height: 36px;
+            flex: 0 0 36px;
+            padding: 0;
+            border-radius: 50%;
+            border: 1.5px solid var(--accent-gold);
+            background: transparent;
+            color: var(--accent-gold);
+            font-family: 'Fredoka', sans-serif;
+            font-weight: 700;
+            font-size: 1.15rem;
+            line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.15s, transform 0.15s;
+        }
+        .btn-nav-round i { font-size: 0.95rem; }
+        .btn-nav-round:hover { background: var(--surface-2); }
+        .btn-nav-round:active { transform: scale(0.94); }
+        .btn-nav-round:focus-visible { outline: 2px solid var(--accent-gold); outline-offset: 2px; }
+
+        /* Le « ? » pulse tant que l'aide n'a jamais été ouverte */
+        .btn-nav-round.pulse { animation: helpPulse 1.6s ease-in-out infinite; }
+        @keyframes helpPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.55); }
+            50%      { box-shadow: 0 0 0 7px rgba(212, 175, 55, 0); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .btn-nav-round.pulse { animation: none; }
+        }
+        @media (max-width: 400px) {
+            .btn-nav-round { width: 34px; height: 34px; flex-basis: 34px; font-size: 1.05rem; }
+        }
+        @media (max-width: 359px) {
+            .brand-title i { display: none; }
+        }
+        /* ===== Aide : démarrage rapide + guide complet + À propos ===== */
+        .help-quick { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+        .help-quick-title { margin: 0; color: var(--accent-gold); font-size: 1.05rem; }
+        .help-quick-sub { margin: 6px 0 0; font-size: 0.9rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+        .help-quick-goal { margin: 0; }
+        .help-quick-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+        .help-quick-buttons { list-style: none; padding-left: 0; }
+        .help-quick-buttons li { display: flex; align-items: center; gap: 8px; }
+        .help-quick-buttons .btn-nav-round { width: 28px; height: 28px; flex-basis: 28px; font-size: 0.9rem; cursor: default; }
+        .help-full-toggle { align-self: flex-start; margin-top: 6px; }
+        #help-full[hidden] { display: none; }
+        .help-about-body p { margin: 4px 0; }
+        .help-about-legal { font-size: 0.78rem; color: var(--text-muted); }
+        .help-footer-credit { margin: 12px 0 0; text-align: center; font-size: 0.72rem; color: var(--text-muted); }
 
 
     </style>
@@ -2619,7 +2674,7 @@
     <div class="nav-left">
         <div class="brand-title">
             <i class="fa-solid fa-layer-group"></i>
-            <span>Rummikub</span>
+            <span>Rami de Tuiles Solo</span>
         </div>
     </div>
     <div class="nav-right">
@@ -2648,9 +2703,11 @@
             <i class="fa-solid fa-trophy" style="color:var(--accent-gold);"></i>
             <span id="top-round-status">1/2</span>
         </div>
-        <button class="btn-icon nav-btn-menu" id="btn-nav-drawer" onclick="toggleDrawer(true)" title="Menu & Analyse">
-            <i class="fa-solid fa-bars"></i>
-        </button>
+		<button id="btn-nav-help" class="btn-nav-round" type="button" aria-label="Aide" title="Aide" onclick="openHelpModal()">?</button>
+		<button id="btn-nav-prefs" class="btn-nav-round" type="button" aria-label="Réglages" title="Réglages" onclick="openPrefsModal()"><i class="fa-solid fa-gear"></i></button>
+		<button class="btn-nav-round nav-btn-menu" id="btn-nav-drawer" type="button" onclick="toggleDrawer(true)" title="Statistiques" aria-label="Statistiques">
+			<i class="fa-solid fa-chart-pie"></i>
+		</button>
     </div>
 
     <!-- PANNEAU FLOTTANT D'HISTORIQUE DES MESSAGES -->
@@ -2758,26 +2815,9 @@
     <aside class="desktop-sidebar">
         <div class="sidebar-header">
             <div class="sidebar-title-wrap">
-                <h3 class="sidebar-title"><i class="fa-solid fa-chart-pie"></i> Analyse</h3>
-                <button type="button" class="btn-sidebar-help" title="Légende des tuiles" onclick="toggleSidebarLegend(event)">?</button>
+                <h3 class="sidebar-title"><i class="fa-solid fa-chart-pie"></i> Statistiques</h3>
             </div>
             <button type="button" class="btn-sidebar-collapse" id="btn-collapse-sidebar" title="Replier le panneau" onclick="toggleSidebarCollapse()">⇤</button>
-            <div class="sidebar-legend-bubble" id="sidebar-legend-bubble">
-                <div style="font-weight:700; color:var(--accent-gold); margin-bottom:2px;">Légende des tuiles</div>
-                <div style="cursor:pointer;color:var(--accent-gold);text-decoration:underline;" onclick="openHelpModal()"><i class="fa-solid fa-circle-question"></i> Comment jouer ?</div>
-                <div style="display:flex; align-items:center; gap:6px;"><span class="legend-indicator" style="box-shadow: 0 0 0 2px #c026d3; background: #c026d3;"></span> Posée par l'IA</div>
-                <div style="display:flex; align-items:center; gap:6px;"><span class="legend-indicator" style="background: linear-gradient(145deg, #fdf4ff, #f0d5fa); border: 1px solid #c026d3;"></span> Déplacée par l'IA</div>
-                <div style="display:flex; align-items:center; gap:6px;"><span class="legend-indicator" style="border: 2px dashed var(--accent-gold); background: rgba(245, 158, 11, 0.15);"></span> Posée par vous</div>
-                <div style="display:flex; align-items:center; gap:6px;"><span class="legend-indicator dot" style="background: #22d3ee; box-shadow: 0 0 4px #22d3ee;"></span> Piochée</div>
-                <div style="font-weight:700; color:var(--accent-gold); margin:6px 0 2px 0; border-top:1px solid var(--panel-glass-border); padding-top:4px;">Boutons d'action</div>
-                <div style="display:flex; align-items:center; gap:8px;"><i class="fa-solid fa-plus" style="width:14px; text-align:center; color:#10b981;"></i> Piocher / <i class="fa-solid fa-forward" style="color:#10b981;"></i> Passer</div>
-                <div style="display:flex; align-items:center; gap:8px;"><i class="fa-solid fa-check" style="width:14px; text-align:center; color:#2563eb;"></i> Valider (badge: ouverture)</div>
-                <div style="display:flex; align-items:center; gap:8px;"><i class="fa-solid fa-rotate-left" style="width:14px; text-align:center; color:#ef4444;"></i> Annuler le tour</div>
-                <div style="display:flex; align-items:center; gap:8px;"><i class="fa-solid fa-palette" style="width:14px; text-align:center;"></i> / <i class="fa-solid fa-arrow-down-1-9"></i> Tri couleur / chiffre</div>
-                <div style="display:flex; align-items:center; gap:8px;"><i class="fa-solid fa-lightbulb" style="width:14px; text-align:center; color:var(--accent-gold);"></i> / <i class="fa-solid fa-play" style="color:#38bdf8;"></i> Indice / Démonstration</div>
-                <div style="font-weight:700; color:var(--accent-gold); margin:6px 0 2px 0; border-top:1px solid var(--panel-glass-border); padding-top:4px;">Messages</div>
-                <div style="color:var(--text-muted); font-size:0.72rem; line-height:1.3;">Bulles = informations importantes · Panneau = coup de l'IA / démonstration · Historique = tout le reste</div>
-            </div>
         </div>
         <div class="sidebar-expanded-content">
             <div id="desktop-analysis-content" style="display:flex; flex-direction:column; gap:8px;"></div>
@@ -2795,20 +2835,10 @@
 <div class="mobile-drawer-overlay" id="mobile-drawer" onclick="if(event.target===this) toggleDrawer(false)">
     <div class="mobile-drawer">
         <div style="display:flex; justify-content:space-between; align-items:center;">
-            <h3 style="color:var(--accent-gold); font-family:'Fredoka', sans-serif;"><i class="fa-solid fa-bars-staggered"></i> Menu & Infos</h3>
+            <h3 style="color:var(--accent-gold); font-family:'Fredoka', sans-serif;"><i class="fa-solid fa-chart-pie"></i> Statistiques</h3>
             <button class="btn-icon" onclick="toggleDrawer(false)"><i class="fa-solid fa-xmark"></i></button>
         </div>
         <div id="drawer-analysis-content" style="display:flex; flex-direction:column; gap:10px;"></div>
-        <div class="sidebar-legend" style="margin-top:8px;">
-            <div class="sidebar-legend-title">Boutons d'action</div>
-            <div class="sidebar-legend-item"><i class="fa-solid fa-plus" style="width:14px; text-align:center; color:#10b981;"></i> Piocher / <i class="fa-solid fa-forward" style="color:#10b981;"></i> Passer</div>
-            <div class="sidebar-legend-item"><i class="fa-solid fa-check" style="width:14px; text-align:center; color:#2563eb;"></i> Valider (badge: ouverture)</div>
-            <div class="sidebar-legend-item"><i class="fa-solid fa-rotate-left" style="width:14px; text-align:center; color:#ef4444;"></i> Annuler le tour</div>
-            <div class="sidebar-legend-item"><i class="fa-solid fa-palette" style="width:14px; text-align:center;"></i> / <i class="fa-solid fa-arrow-down-1-9"></i> Tri couleur / chiffre</div>
-            <div class="sidebar-legend-item"><i class="fa-solid fa-lightbulb" style="width:14px; text-align:center; color:var(--accent-gold);"></i> / <i class="fa-solid fa-play" style="color:#38bdf8;"></i> Indice / Démonstration</div>
-            <div style="font-weight:700; color:var(--accent-gold); margin:6px 0 2px 0; border-top:1px solid var(--panel-glass-border); padding-top:4px;">Messages</div>
-            <div style="color:var(--text-muted); font-size:0.72rem; line-height:1.3;">Bulles = informations importantes · Panneau = coup de l'IA / démonstration · Historique = tout le reste</div>
-        </div>
     </div>
 </div>
 
@@ -2819,7 +2849,10 @@
             <h2 class="modal-title" style="margin:0;">
                 <i class="fa-solid fa-play"></i> Nouvelle partie
             </h2>
-            <button type="button" class="btn-icon btn-modal-close" onclick="closeSettingsModal()" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
+            <div style="display:flex; align-items:center; gap:8px;">
+                <button id="welcome-help-btn" class="btn-nav-round" type="button" aria-label="Aide : comment jouer ?" title="Aide : comment jouer ?" onclick="openHelpModal()">?</button>
+                <button type="button" class="btn-icon btn-modal-close" onclick="closeSettingsModal()" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
+            </div>
         </div>
         <div style="display:flex; flex-direction:column; gap:10px; margin:4px 0;">
             <div style="display:flex; justify-content:space-between; align-items:center; min-height:44px; gap:8px;">
@@ -2867,7 +2900,6 @@
             </div>
         </div>
         <div style="display:flex; flex-direction:column; gap:8px; margin-top:6px; width:100%;">
-            <a href="javascript:void(0)" id="welcome-help-link" onclick="openHelpModal()" style="text-align:center;font-size:0.85rem;color:var(--accent-gold);text-decoration:underline;padding:2px;border-radius:6px;">Comment jouer ?</a>
             <button class="btn-game secondary" id="welcome-continue-btn" style="width:100%; display:none;" onclick="continueSavedMatch()">Continuer la manche</button>
             <button class="btn-game primary" id="welcome-new-match-btn" style="width:100%;" onclick="applyWelcomeSettingsAndStart()">Jouer</button>
         </div>
@@ -2892,11 +2924,68 @@
     <div class="modal-card">
         <div style="display:flex;justify-content:space-between;align-items:center;">
             <h2 class="modal-title" style="margin:0;"><i class="fa-solid fa-circle-question"></i> Comment jouer ?</h2>
+
             <button type="button" class="btn-icon btn-modal-close" onclick="closeHelpModal()" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
         </div>
 
-        <details class="help-section" open>
+        <section id="help-quick" class="help-quick" style="display:flex; flex-direction:column; gap:8px;">
+            <p class="help-quick-goal" style="margin:0; font-size:0.9rem;">
+                <i class="fa-solid fa-bullseye" style="color:var(--accent-gold);"></i> 
+                But : Posez <strong>toutes vos tuiles</strong> avant l'IA en créant des <strong>suites</strong> (3+ tuiles consécutives de même couleur) ou des <strong>séries</strong> (3 ou 4 tuiles de même valeur et de couleurs différentes).
+            </p>
+
+            <!-- FONCTIONNEMENT GLOBAL SUR ÉCRAN VERTICAL -->
+            <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:0.8rem; line-height:1.4;">
+                <div style="font-weight:700; color:var(--accent-gold); margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+                    <i class="fa-solid fa-mobile-screen"></i> Fonctionnement sur écran vertical
+                </div>
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                    <div><strong>1. En haut :</strong> statut du match et accès rapides (Aide, Réglages, Statistiques).</div>
+                    <div><strong>2. Au centre (Tapis) :</strong> zoom automatique permanent pour voir toute la table sans défilement horizontal.</div>
+                    <div><strong>3. En bas (Chevalet) :</strong> vos tuiles en main avec tri rapide et barre d'actions (Piocher, Valider, Annuler, Indice).</div>
+                    <div><strong>4. Tiroir latéral (📊) :</strong> suivi du duel et carte des 106 tuiles déjà sorties.</div>
+                </div>
+            </div>
+
+            <!-- GUIDE DES ICÔNES -->
+            <div style="background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:0.78rem; line-height:1.35;">
+                <div style="font-weight:700; color:var(--accent-gold); margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+                    <i class="fa-solid fa-icons"></i> Les icônes du jeu
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px 8px;">
+                    <div><span class="help-key">?</span> <strong>Aide :</strong> ouvrir ce panneau</div>
+                    <div><i class="fa-solid fa-gear" style="color:var(--accent-gold);"></i> <strong>Réglages :</strong> options & zoom</div>
+                    <div><i class="fa-solid fa-chart-pie" style="color:var(--accent-gold);"></i> <strong>Statistiques :</strong> duel & tuiles</div>
+                    <div><i class="fa-solid fa-user"></i> <strong>Vos tuiles</strong> restantes</div>
+                    <div><i class="fa-solid fa-robot"></i> <strong>Tuiles de l'IA</strong> restantes</div>
+                    <div><i class="fa-solid fa-cubes-stacked" style="color:var(--accent-gold);"></i> <strong>Pioche :</strong> tuiles restantes</div>
+                    <div><i class="fa-solid fa-plus" style="color:var(--accent-gold);"></i> <strong>Piocher :</strong> +1 tuile & passe</div>
+                    <div><i class="fa-solid fa-check" style="color:#2ecc71;"></i> <strong>Valider :</strong> finit votre tour</div>
+                    <div><i class="fa-solid fa-rotate-left" style="color:#e74c3c;"></i> <strong>Annuler :</strong> remet le chevalet</div>
+                    <div><i class="fa-solid fa-palette"></i> / <i class="fa-solid fa-arrow-down-1-9"></i> <strong>Trier :</strong> couleur / valeur</div>
+                    <div><i class="fa-solid fa-lightbulb" style="color:var(--accent-gold);"></i> <strong>Indice :</strong> coup suggéré</div>
+                    <div><i class="fa-solid fa-arrows-left-right" style="color:var(--accent-gold);"></i> <strong>Fusionner :</strong> recolle une suite</div>
+                </div>
+            </div>
+
+            <!-- REGLES CLÉS RAPIDES -->
+            <ul style="margin:0; padding-left:18px; font-size:0.78rem; line-height:1.35; color:var(--text);">
+                <li><strong>Ouverture :</strong> votre 1<sup>re</sup> pose doit totaliser <strong>au moins 30 points</strong> sans toucher à la table.</li>
+                <li><strong>Après ouverture :</strong> vous pouvez réarranger librement toutes les combinaisons du tapis.</li>
+            </ul>
+
+            <div style="display:flex; justify-content:center; margin-top:2px;">
+                <button type="button" id="btn-help-full" class="btn-game secondary help-full-toggle" onclick="toggleHelpFull()">
+                    <span>Guide complet</span> <i class="fa-solid fa-chevron-down"></i>
+                </button>
+            </div>
+        </section>
+
+        <div id="help-full" hidden>
+
+        <details class="help-section">
             <summary><i class="fa-solid fa-bullseye"></i> But du jeu</summary>
+
             <div class="help-body">
                 <p>Soyez le <strong>premier à poser toutes les tuiles de votre chevalet</strong> sur la table, en formant des suites et des séries.</p>
                 <p>Quand un joueur vide son chevalet, la manche s'arrête : il marque les points qui restent dans la main de l'adversaire (le joker compte 30), et l'adversaire les perd.</p>
@@ -2980,10 +3069,11 @@
             <summary><i class="fa-solid fa-chart-pie"></i> Statistiques et réglages</summary>
             <div class="help-body">
                 <ul>
-                    <li><strong>Sur ordinateur</strong> (écran large) : le panneau <strong>« Analyse »</strong>, à droite, affiche la carte <strong>Partie</strong> (tuiles de chacun, courbe de la partie, pioche, vos points en main), la carte <strong>« Tuiles déjà sorties »</strong> (pour chaque tuile : sur la table, dans votre main ou encore inconnue, plus les jokers), le score du <strong>Match</strong> et les <strong>Réglages</strong>. Le bouton ⇤ le replie, le bouton ? affiche la légende.</li>
-                    <li><strong>Sur téléphone et tablette</strong> : touchez <i class="fa-solid fa-bars"></i> en haut à droite pour ouvrir <strong>« Menu &amp; Infos »</strong> : vous y trouvez les mêmes informations et les mêmes réglages.</li>
-                    <li><strong>Dans Réglages</strong> : niveau de l'IA (Facile, Normal, Expert), minuteur, aides (bouton Indice), zoom automatique, mode daltonien, affichage, zoom, historique, nouveau match et « Réafficher les astuces ».</li>
+                    <li><span class="help-key">?</span> ouvre cette aide à tout moment (sur ordinateur : touche ?).</li>
+                    <li><i class="fa-solid fa-gear"></i> <strong>Réglages</strong>, en haut à droite : niveau de l'IA, minuteur, aides, zoom automatique, mode daltonien, affichage, zoom, historique, nouveau match et « Réafficher les astuces ».</li>
+                    <li><i class="fa-solid fa-chart-pie"></i> <strong>Analyse</strong> : sur ordinateur, le panneau de droite (⇤ le replie) ; sur téléphone, le bouton en haut à droite. Vous y trouvez la carte <strong>Partie</strong> (tuiles de chacun, courbe, pioche, vos points en main), <strong>« Tuiles déjà sorties »</strong> (sur la table, dans votre main ou inconnues, plus les jokers) et le score du <strong>Match</strong>.</li>
                 </ul>
+
             </div>
         </details>
 
@@ -3010,6 +3100,22 @@
                 </ul>
             </div>
         </details>
+
+
+        <details class="help-section" id="help-about">
+            <summary><i class="fa-solid fa-circle-info"></i> À propos</summary>
+            <div class="help-body">
+                <p><strong id="about-game-name">Rami de Tuiles Solo</strong></p>
+                <p>Jeu développé à titre personnel par <strong>Sébastien Lecointre</strong>.</p>
+                <p>Version <span id="about-version" class="app-version-text" style="font-family:var(--font-mono);"></span></p>
+                <p class="help-caption" style="margin-top:8px; line-height:1.45; color:var(--text);">
+                    Merci beaucoup de jouer à ce jeu ! C'est un projet personnel et indépendant conçu avec passion pour vous offrir des parties fluides, conviviales et sans publicité. Très bon divertissement et que la meilleure stratégie l'emporte !
+                </p>
+                <p class="help-caption" style="margin-top:6px;">© 2026 Sébastien Lecointre</p>
+            </div>
+        </details>
+        <div class="help-footer" id="help-footer-credit"></div>
+</div>
     </div>
 </div>
 
@@ -3083,23 +3189,106 @@
         <div id="test-results-container"></div>
     </div>
 </div>
+<!-- MODALE DES RÉGLAGES EN COURS DE PARTIE -->
+<div id="prefs-modal-overlay" style="display:none;" onclick="if(event.target===this)closePrefsModal()">
+    <div class="modal-card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h2 class="modal-title" style="margin:0;"><i class="fa-solid fa-gear"></i> Réglages</h2>
+            <button type="button" class="btn-icon btn-modal-close" onclick="closePrefsModal()" aria-label="Fermer"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="card-settings" style="display:flex; flex-direction:column; gap:6px; font-size:0.82rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; min-height:36px; gap:6px;">
+                <label><span>Niveau</span></label>
+                <div class="segmented-control" role="radiogroup" style="padding:1px; gap:1px;">
+                    <label class="seg-item" style="padding:0;"><input type="radio" name="setting-ai" value="facile" onchange="onSettingsAiLevelChange(this.value)"><span style="padding:3px 6px; min-height:28px; font-size:0.75rem;">Facile</span></label>
+                    <label class="seg-item" style="padding:0;"><input type="radio" name="setting-ai" value="normal" onchange="onSettingsAiLevelChange(this.value)"><span style="padding:3px 6px; min-height:28px; font-size:0.75rem;">Normal</span></label>
+                    <label class="seg-item" style="padding:0;"><input type="radio" name="setting-ai" value="expert" onchange="onSettingsAiLevelChange(this.value)"><span style="padding:3px 6px; min-height:28px; font-size:0.75rem;">Expert</span></label>
+                </div>
+            </div>
+            <div class="setting-ai-desc" style="font-size:0.75rem; color:var(--text-muted); margin-top:-4px;"></div>
+            <div style="display:flex; justify-content:space-between; align-items:center; min-height:36px; cursor:pointer;">
+                <label><span>Minuteur 60 s</span></label>
+                <label class="toggle-switch toggle-sm">
+                    <input type="checkbox" class="setting-timer-chk" onchange="onSettingsTimerChange(this.checked)">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; min-height:36px; cursor:pointer;" title="Affiche le bouton Indice">
+                <label title="Affiche le bouton Indice"><span>Aides</span></label>
+                <label class="toggle-switch toggle-sm" title="Affiche le bouton Indice">
+                    <input type="checkbox" class="setting-hints-chk" onchange="onSettingsHintsChange(this.checked)">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; min-height:36px; cursor:pointer;" title="Adapte la taille des tuiles pour que toute la table tienne à l'écran">
+                <label title="Adapte la taille des tuiles pour que toute la table tienne à l'écran"><span>Zoom automatique</span></label>
+                <label class="toggle-switch toggle-sm" title="Adapte la taille des tuiles pour que toute la table tienne à l'écran">
+                    <input type="checkbox" class="setting-autofit-chk" onchange="onSettingsAutoFitChange(this.checked)">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; min-height:36px; cursor:pointer;">
+                <label><span>Daltonien</span></label>
+                <label class="toggle-switch toggle-sm">
+                    <input type="checkbox" class="setting-colorblind-chk" onchange="onSettingsColorblindChange(this.checked)">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; min-height:36px; gap:6px;">
+                <label><span>Affichage</span></label>
+                <div class="segmented-control" role="radiogroup" style="padding:1px; gap:1px;">
+                    <label class="seg-item" style="padding:0;"><input type="radio" name="setting-layout" value="flow" onchange="onSettingsLayoutChange(this.value)"><span style="padding:3px 6px; min-height:28px; font-size:0.75rem;">Compact</span></label>
+                    <label class="seg-item" style="padding:0;"><input type="radio" name="setting-layout" value="columns" onchange="onSettingsLayoutChange(this.value)"><span style="padding:3px 6px; min-height:28px; font-size:0.75rem;">Suites / Séries</span></label>
+                </div>
+            </div>
+            <div class="settings-zoom-row" style="display:flex; justify-content:space-between; align-items:center;">
+                <label><span>Zoom</span></label>
+                <div style="display:flex; align-items:center; gap:4px;">
+                    <button type="button" class="btn-zoom-step" onclick="adjustBoardZoom(-0.05)" title="Dézoomer (-)"><i class="fa-solid fa-minus"></i></button>
+                    <span class="setting-zoom-val" style="min-width:38px; text-align:center; font-family:var(--font-mono); font-size:0.78rem;">100%</span>
+                    <button type="button" class="btn-zoom-step" onclick="adjustBoardZoom(0.05)" title="Zoomer (+)"><i class="fa-solid fa-plus"></i></button>
+                </div>
+            </div>
+            <button type="button" class="btn-game secondary btn-reset-tips" style="min-height:38px; font-size:0.8rem; margin-top:2px;" onclick="resetTipsSeen()">Réafficher les astuces</button>
+            <div style="display:flex; gap:6px; margin-top:4px;">
+                <button type="button" class="btn-game secondary btn-settings-log" style="flex:1; min-height:36px; height:36px; font-size:0.8rem; padding:0 6px;" onclick="onSettingsClickHistory()"><i class="fa-solid fa-clock-rotate-left"></i> Historique</button>
+                <button type="button" class="btn-game secondary btn-settings-newmatch" style="flex:1; min-height:36px; height:36px; font-size:0.8rem; padding:0 6px;" onclick="onSettingsClickNewMatch()"><i class="fa-solid fa-rotate-right"></i> Nouveau match</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script>
-/*
-  =============================================================================
-  CHECKLIST DE VÉRIFICATION MANUELLE AVANT CHAQUE VERSION (10 POINTS) :
-  1. Clignotement / Furtivité : Aucun clignotement ni re-création complète des nœuds DOM lors du glisser-déposer (technique FLIP et réconciliation).
-  2. Défilement tactile : Le tapis défile verticalement (pan-y) sans déclencher de glisser-déposer intempestif ; le chevalet défile verticalement (pan-y).
-  3. Intention du Joker : Glisser un Joker à gauche d'une suite prend min-1, à droite max+1, dans un trou la valeur manquante ; sélecteur si ambiguïté.
-  4. Scission automatique des suites : Retirer une tuile du milieu d'une suite la sépare automatiquement en deux combinaisons (gauche/droite).
-  5. Dépôt sur zone vide / séparateur : Déposer sur une zone vide crée une nouvelle rangée ; déposer sur un séparateur ou slot insère la tuile sans scission accidentelle.
-  6. Détection des doublons en suite : Déposer une tuile en doublon dans une suite (ex: 6 sur 4-5-6-7-8) propose la scission en 2 suites valides (4-5-6 et 6-7-8).
-  7. Validation en direct : Le bouton Valider affiche l'état temps réel, les points d'ouverture manquants, et s'invalide dès qu'une rangée a < 3 tuiles.
-  8. Comportement de l'IA : L'IA expert temporise judicieusement, ouvre >= 30 pts, respecte R11 pour le joker, et le bouton "Dernier coup" surligne ses rangées.
-  9. Minuteur R12 : Minuteur 60s fonctionnel (alerte visuelle sous 15s) ; temps écoulé sans coup = pioche 1 ; temps écoulé invalide = pénalité de 3 tuiles.
-  10. Fin de manche et Match multi-manches : Décompte des scores exact (Joker = 30 pts), victoire par écarts si blocage, cumul des manches et LocalStorage.
-  =============================================================================
-*/
+    const APP_VERSION = '2026.11.07-1'; // ← à changer à chaque mise en ligne
+    document.addEventListener('DOMContentLoaded', () => {
+        fillAboutInfo();
+    });
+
+    const GAME_NAME = 'Rami de Tuiles Solo'; // nom provisoire, à remplacer par le nom définitif
+    function fillAboutInfo() {
+        const ver = (typeof APP_VERSION !== 'undefined') ? APP_VERSION : '';
+        const n = document.getElementById('about-game-name');
+        const v = document.getElementById('about-version');
+        const f = document.getElementById('help-footer-credit');
+        if (n) n.textContent = GAME_NAME;
+        if (v) v.textContent = ver ? 'v' + ver : '';
+        if (f) f.textContent = `${GAME_NAME} · par Sébastien Lecointre${ver ? ' · v' + ver : ''}`;
+        document.querySelectorAll('.app-version-text').forEach(el => {
+            el.textContent = ver ? 'v' + ver : '';
+        });
+    }
+    function toggleHelpFull(force) {
+        const full = document.getElementById('help-full');
+        const btn = document.getElementById('btn-help-full');
+        if (!full || !btn) return;
+        const open = (typeof force === 'boolean') ? force : full.hidden;
+        full.hidden = !open;
+        btn.setAttribute('aria-expanded', String(open));
+        btn.innerHTML = open
+            ? '<i class="fa-solid fa-chevron-up"></i> Masquer le guide complet'
+            : '<i class="fa-solid fa-book-open"></i> Voir le guide complet';
+    }
+    document.addEventListener('DOMContentLoaded', fillAboutInfo);
 
     function createEngine() {
         const COLORS = ['red', 'blue', 'yellow', 'black'];
@@ -3554,13 +3743,6 @@
     }
     function toggleSidebarCollapse() {
         setSidebarCollapsed(!sidebarCollapsed);
-    }
-    function toggleSidebarLegend(e) {
-        if (e) e.stopPropagation();
-        document.querySelectorAll('.sidebar-legend-bubble').forEach(b => b.classList.toggle('active'));
-    }
-    function closeSidebarLegend() {
-        document.querySelectorAll('.sidebar-legend-bubble').forEach(b => b.classList.remove('active'));
     }
 
     // Gestion de la disposition du tapis (Compact vs Liste vs Colonnes)
@@ -5498,6 +5680,7 @@
         updateMatchDisplay();
         applyHintsVisibility();
         syncSettingsControls();
+        updateHelpPulse();
         updateMultiSelectChip();
     }
 
@@ -5568,6 +5751,77 @@
         applyHintsVisibility();
         syncSettingsControls();
     }
+    
+    document.addEventListener('DOMContentLoaded', () => {
+        fillAboutInfo();
+    });
+
+    function openPrefsModal() {
+        closeHelpModal(); // s'assure que l'aide est fermée
+        try { pauseTurnTimer(); } catch(e){}
+        try { syncSettingsControls(); } catch(e){}
+        const o = document.getElementById('prefs-modal-overlay');
+        if (o) o.style.display = 'flex';
+    }
+
+    function closePrefsModal() {
+        const o = document.getElementById('prefs-modal-overlay');
+        if (o) o.style.display = 'none';
+        try { resumeTurnTimer(); } catch(e){}
+    }
+
+    function openHelpModal() {
+        closePrefsModal(); // s'assure que les réglages sont fermés
+        try { pauseTurnTimer(); } catch(e){}
+        try { localStorage.setItem('rummikub_help_seen', '1'); } catch(e){}
+        const helpBtn = document.getElementById('btn-nav-help');
+        if (helpBtn) helpBtn.classList.remove('pulse');
+        const welcomeHelpBtn = document.getElementById('welcome-help-btn');
+        if (welcomeHelpBtn) welcomeHelpBtn.classList.remove('pulse');
+        try { toggleHelpFull(false); } catch(e){}
+        try { fillAboutInfo(); } catch(e){}
+        const o = document.getElementById('help-overlay');
+        if (o) o.style.display = 'flex';
+    }
+
+    function closeHelpModal() {
+        const o = document.getElementById('help-overlay');
+        if (o) o.style.display = 'none';
+        try { resumeTurnTimer(); } catch(e){}
+    }
+
+    // Export direct vers window pour garantir l'accès par onclick
+    window.openPrefsModal = openPrefsModal;
+    window.closePrefsModal = closePrefsModal;
+    window.openSettingsPanel = openPrefsModal;
+    window.closeSettingsPanel = closePrefsModal;
+    window.openHelpModal = openHelpModal;
+    window.closeHelpModal = closeHelpModal;
+    window.toggleDrawer = toggleDrawer;
+
+
+    function fillAboutInfo() {
+        const ver = (typeof APP_VERSION !== 'undefined') ? APP_VERSION : '';
+        const n = document.getElementById('about-game-name');
+        const v = document.getElementById('about-version');
+        const f = document.getElementById('help-footer-credit');
+        if (n) n.textContent = (typeof GAME_NAME !== 'undefined') ? GAME_NAME : 'Rami de Tuiles Solo';
+        if (v) v.textContent = ver ? 'v' + ver : '';
+        if (f) f.textContent = `${(typeof GAME_NAME !== 'undefined') ? GAME_NAME : 'Rami de Tuiles Solo'} · Développé par Sébastien Lecointre${ver ? ' · v' + ver : ''}`;
+        document.querySelectorAll('.app-version-text').forEach(el => {
+            el.textContent = ver ? 'v' + ver : '';
+        });
+    }
+
+    function updateHelpPulse() {
+        const helpBtn = document.getElementById('btn-nav-help');
+        const welcomeHelpBtn = document.getElementById('welcome-help-btn');
+        const shouldPulse = !localStorage.getItem('rummikub_help_seen');
+        try {
+            if (helpBtn) helpBtn.classList.toggle('pulse', shouldPulse);
+            if (welcomeHelpBtn) welcomeHelpBtn.classList.toggle('pulse', shouldPulse);
+        } catch (e) {}
+    }
     function showTipOnce(id, text) {
         if (!hintsEnabled) return;
         try { const raw = localStorage.getItem('rummikub_tips_seen'), s = raw ? JSON.parse(raw) : []; if (Array.isArray(s) && s.includes(id)) return; } catch(e) { return; }
@@ -5579,15 +5833,7 @@
         try { localStorage.removeItem('rummikub_tips_seen'); } catch(e){}
         notify({ text: "Astuces réinitialisées", kind: 'info', channel: 'bubble', ttlMs: 2000, key: 'reset-tips' });
     }
-    function openHelpModal() {
-        pauseTurnTimer();
-        try { localStorage.setItem('rummikub_help_seen', '1'); } catch(e){}
-        const runEl = document.getElementById('help-run-ex'); if (runEl && !runEl.children.length) [10,11,12].forEach(v => runEl.appendChild(createTileElement({id:-10-v,value:v,color:'red',isJoker:false},'board')));
-        const grpEl = document.getElementById('help-grp-ex'); if (grpEl && !grpEl.children.length) ['red','blue','yellow'].forEach((c,i) => grpEl.appendChild(createTileElement({id:-20-i,value:9,color:c,isJoker:false},'board')));
-        const hl = document.getElementById('welcome-help-link'); if (hl) hl.style.outline = 'none';
-        const o = document.getElementById('help-overlay'); if (o) o.style.display = 'flex';
-    }
-    function closeHelpModal() { const o = document.getElementById('help-overlay'); if (o) o.style.display = 'none'; resumeTurnTimer(); }
+
     function setAutoFitSetting(enabled) {
 		setZoomMode(enabled ? 'auto' : 'manual');
 		fitBoardZoom();
@@ -8201,7 +8447,7 @@
                     winner: 'player',
                     playerScore: +aiPenalty,
                     aiScore: -aiPenalty,
-                    reason: "Le joueur a vidé son chevalet (« Rummikub ! »).",
+                    reason: "Le joueur a vidé son chevalet (« Rami ! »).",
                     calc: `IA conserve ${aiHand.length} tuiles (${aiPenalty} pts). Joueur marque +${aiPenalty} pts, IA marque -${aiPenalty} pts.`
                 };
             } else {
@@ -8209,7 +8455,7 @@
                     winner: 'ai',
                     playerScore: -playerPenalty,
                     aiScore: +playerPenalty,
-                    reason: "L'IA a vidé son chevalet (« Rummikub ! »).",
+                    reason: "L'IA a vidé son chevalet (« Rami ! »).",
                     calc: `Joueur conserve ${playerHand.length} tuiles (${playerPenalty} pts). IA marque +${playerPenalty} pts, Joueur marque -${playerPenalty} pts.`
                 };
             }
@@ -8429,6 +8675,8 @@
         if (isDemoActive || isReplayingAiMove) return;
         const settingsOverlay = document.getElementById('welcome-settings-overlay');
         if (settingsOverlay && (settingsOverlay.style.display === 'flex' || settingsOverlay.style.display === 'block')) return;
+        const prefsOverlay = document.getElementById('prefs-modal-overlay');
+        if (prefsOverlay && (prefsOverlay.style.display === 'flex' || prefsOverlay.style.display === 'block')) return;
         const drawer = document.getElementById('mobile-drawer');
         if (drawer && drawer.classList.contains('active')) return;
         if (timerPaused) {
@@ -10479,8 +10727,8 @@
             return;
         }
         if (e.key === 'Escape') {
+            const p = document.getElementById('prefs-modal-overlay'); if (p && p.style.display !== 'none') { e.preventDefault(); closePrefsModal(); return; }
             const h = document.getElementById('help-overlay'); if (h && h.style.display !== 'none') { e.preventDefault(); closeHelpModal(); return; }
-            closeSidebarLegend();
             const panel = document.getElementById('log-panel');
             if (panel && panel.style.display !== 'none') {
                 e.preventDefault();
@@ -10498,6 +10746,17 @@
         // Raccourcis clavier zoom +/- quand pas dans un champ
         const inInput = ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName);
         if (!inInput) {
+            if (e.key === '?') {
+                const anyModalOpen = [
+                    'help-overlay', 'prefs-modal-overlay', 'welcome-settings-overlay', 'starter-draw-overlay',
+                    'game-over-overlay', 'test-report-overlay'
+                ].some(id => {
+                    const el = document.getElementById(id);
+                    return el && (el.style.display === 'flex' || el.style.display === 'block');
+                }) || (document.getElementById('mobile-drawer')?.classList.contains('active'))
+                   || (document.getElementById('log-panel')?.style.display !== 'none');
+                if (!anyModalOpen) { e.preventDefault(); openHelpModal(); return; }
+            }
             if (e.key === '+' || e.key === '=' || (e.ctrlKey && (e.key === '+' || e.key === '='))) {
                 if (e.ctrlKey) e.preventDefault();
                 adjustBoardZoom(0.05);
@@ -10509,12 +10768,6 @@
     });
 
     document.addEventListener('pointerdown', (e) => {
-        const bubble = document.getElementById('sidebar-legend-bubble');
-        if (bubble && bubble.classList.contains('active')) {
-            if (!bubble.contains(e.target) && !e.target.closest('.btn-sidebar-help')) {
-                closeSidebarLegend();
-            }
-        }
         const panel = document.getElementById('log-panel');
         if (!panel || panel.style.display === 'none') return;
         const pill = document.getElementById('turn-indicator-pill');
@@ -11427,80 +11680,6 @@
                             <div class="match-history-table-wrap"></div>
                         </details>
                     </div>
-
-                    <!-- 6. RÉGLAGES -->
-                    <details class="dash-card card-settings" ${isSettingsOpen ? 'open' : ''} ontoggle="saveSettingsSectionState(this.open)">
-                        <summary class="dash-card-title" style="cursor:pointer; list-style:none; display:flex; justify-content:space-between; align-items:center; user-select:none;">
-                            <span><i class="fa-solid fa-gear"></i> Réglages</span>
-                            <i class="fa-solid fa-chevron-down settings-chevron" style="font-size:0.65rem; transition:transform 0.2s ease;"></i>
-                        </summary>
-                        <div class="settings-content" style="display:flex; flex-direction:column; gap:5px; margin-top:6px; font-size:0.78rem;">
-                            <div style="display:flex; justify-content:space-between; align-items:center; min-height:36px; gap:6px;">
-                                <label><span>Niveau</span></label>
-                                <div class="segmented-control" role="radiogroup" style="padding:1px; gap:1px;">
-                                    <label class="seg-item" style="padding:0;"><input type="radio" name="setting-ai" value="facile" onchange="onSettingsAiLevelChange(this.value)"><span style="padding:3px 6px; min-height:28px; font-size:0.72rem;">Facile</span></label>
-                                    <label class="seg-item" style="padding:0;"><input type="radio" name="setting-ai" value="normal" onchange="onSettingsAiLevelChange(this.value)"><span style="padding:3px 6px; min-height:28px; font-size:0.72rem;">Normal</span></label>
-                                    <label class="seg-item" style="padding:0;"><input type="radio" name="setting-ai" value="expert" onchange="onSettingsAiLevelChange(this.value)"><span style="padding:3px 6px; min-height:28px; font-size:0.72rem;">Expert</span></label>
-                                </div>
-                            </div>
-                            <div class="setting-ai-desc" style="font-size:0.72rem; color:var(--text-muted); margin-top:-2px;"></div>
-
-                            <div style="display:flex; justify-content:space-between; align-items:center; min-height:36px; cursor:pointer;">
-                                <label><span>Minuteur 60 s</span></label>
-                                <label class="toggle-switch toggle-sm" style="min-width:36px; min-height:36px; width:36px; height:36px;">
-                                    <input type="checkbox" class="setting-timer-chk" onchange="onSettingsTimerChange(this.checked)">
-                                    <span class="toggle-slider" style="width:36px; height:20px;"></span>
-                                </label>
-                            </div>
-                            <button type="button" class="btn-game secondary btn-help-sheet" style="min-height:36px;font-size:0.75rem;" onclick="openHelpModal()"><i class="fa-solid fa-circle-question"></i> Comment jouer ?</button>
-                            <button type="button" class="btn-game secondary btn-reset-tips" style="min-height:44px; font-size:0.75rem; margin-top:4px;" onclick="resetTipsSeen()">Réafficher les astuces</button>
-
-                            <div style="display:flex; justify-content:space-between; align-items:center; min-height:36px; cursor:pointer;" title="Affiche le bouton Indice">
-                                <label title="Affiche le bouton Indice"><span>Aides</span></label>
-                                <label class="toggle-switch toggle-sm" style="min-width:36px; min-height:36px; width:36px; height:36px;" title="Affiche le bouton Indice">
-                                    <input type="checkbox" class="setting-hints-chk" onchange="onSettingsHintsChange(this.checked)" title="Affiche le bouton Indice">
-                                    <span class="toggle-slider" style="width:36px; height:20px;"></span>
-                                </label>
-                            </div>
-
-                            <div style="display:flex; justify-content:space-between; align-items:center; min-height:36px; cursor:pointer;" title="Adapte la taille des tuiles pour que toute la table tienne à l'écran">
-                                <label title="Adapte la taille des tuiles pour que toute la table tienne à l'écran"><span>Zoom automatique</span></label>
-                                <label class="toggle-switch toggle-sm" style="min-width:36px; min-height:36px; width:36px; height:36px;" title="Adapte la taille des tuiles pour que toute la table tienne à l'écran">
-                                    <input type="checkbox" class="setting-autofit-chk" onchange="onSettingsAutoFitChange(this.checked)">
-                                    <span class="toggle-slider" style="width:36px; height:20px;"></span>
-                                </label>
-                            </div>
-
-                            <div style="display:flex; justify-content:space-between; align-items:center; min-height:36px; cursor:pointer;">
-                                <label><span>Daltonien</span></label>
-                                <label class="toggle-switch toggle-sm" style="min-width:36px; min-height:36px; width:36px; height:36px;">
-                                    <input type="checkbox" class="setting-colorblind-chk" onchange="onSettingsColorblindChange(this.checked)">
-                                    <span class="toggle-slider" style="width:36px; height:20px;"></span>
-                                </label>
-                            </div>
-
-                            <div style="display:flex; justify-content:space-between; align-items:center; min-height:36px; gap:6px;">
-                                <label><span>Affichage</span></label>
-                                <div class="segmented-control" role="radiogroup" style="padding:1px; gap:1px;">
-                                    <label class="seg-item" style="padding:0;"><input type="radio" name="setting-layout" value="flow" onchange="onSettingsLayoutChange(this.value)"><span style="padding:3px 6px; min-height:28px; font-size:0.72rem;">Compact</span></label>
-                                    <label class="seg-item" style="padding:0;"><input type="radio" name="setting-layout" value="columns" onchange="onSettingsLayoutChange(this.value)"><span style="padding:3px 6px; min-height:28px; font-size:0.72rem;">Suites / Séries</span></label>
-                                </div>
-                            </div>
-
-                            <div class="settings-zoom-row" style="display:flex; justify-content:space-between; align-items:center;">
-                                <label><span>Zoom</span></label>
-                                <div style="display:flex; align-items:center; gap:4px;">
-                                    <button type="button" class="btn-zoom-step" style="min-width:28px; min-height:28px; width:28px; height:28px; padding:0;" onclick="adjustBoardZoom(-0.05)" title="Dézoomer (-)"><i class="fa-solid fa-minus"></i></button>
-                                    <span class="setting-zoom-val" style="min-width:38px; text-align:center; font-family:var(--font-mono); font-size:0.75rem;">100%</span>
-                                    <button type="button" class="btn-zoom-step" style="min-width:28px; min-height:28px; width:28px; height:28px; padding:0;" onclick="adjustBoardZoom(0.05)" title="Zoomer (+)"><i class="fa-solid fa-plus"></i></button>
-                                </div>
-                            </div>
-                            <div style="display:flex; gap:6px; margin-top:4px;">
-                                <button type="button" class="btn-game secondary btn-settings-log" style="flex:1; min-height:36px; height:36px; font-size:0.78rem; padding:0 6px;" onclick="onSettingsClickHistory()"><i class="fa-solid fa-clock-rotate-left"></i> Historique</button>
-                                <button type="button" class="btn-game secondary btn-settings-newmatch" style="flex:1; min-height:36px; height:36px; font-size:0.78rem; padding:0 6px;" onclick="onSettingsClickNewMatch()"><i class="fa-solid fa-rotate-right"></i> Nouveau match</button>
-                            </div>
-                        </div>
-                    </details>
                 </div>
             `;
             const rowsContainer = container.querySelector('.heatmap-rows-container');
@@ -11700,10 +11879,12 @@
     }
     function onSettingsClickHistory() {
         toggleDrawer(false);
+        closePrefsModal();
         toggleLogPanel(true);
     }
     function onSettingsClickNewMatch() {
         toggleDrawer(false);
+        closePrefsModal();
         startNewMatch();
     }
     function syncSettingsControls() {
@@ -11752,7 +11933,7 @@
         if (zoomVal) zoomVal.textContent = zoomPct;
 		const fitBtn = document.getElementById('btn-zoom-fit');
 		if (fitBtn) fitBtn.classList.toggle('active', zoomMode === 'auto' && currentBoardZoom === 1);
-        const hl = document.getElementById('welcome-help-link'); if (hl) hl.style.outline = localStorage.getItem('rummikub_help_seen') ? 'none' : '2px solid var(--accent-gold)';
+        updateHelpPulse();
 
         const aiDesc = getAiLevelDescription(aiProfile);
         const wDesc = document.getElementById('welcome-ai-desc');
@@ -14092,18 +14273,10 @@
                 const header = document.querySelector('.sidebar-header');
                 const expanded = document.querySelector('.sidebar-expanded-content');
                 const collapsedContent = document.querySelector('.sidebar-collapsed-content');
-                const legendBubble = document.getElementById('sidebar-legend-bubble');
 
                 assert(header !== null, ".sidebar-header doit exister");
                 assert(expanded !== null, ".sidebar-expanded-content doit exister");
                 assert(collapsedContent !== null, ".sidebar-collapsed-content doit exister");
-                assert(legendBubble !== null, "#sidebar-legend-bubble doit exister");
-
-                const collapsedDisplay = window.getComputedStyle(collapsedContent).display;
-                assert(collapsedDisplay === 'none', `Le contenu replié doit être masqué par défaut (obtenu: ${collapsedDisplay})`);
-
-                const legendDisplay = window.getComputedStyle(legendBubble).display;
-                assert(legendDisplay === 'none', `La légende doit être masquée par défaut (obtenu: ${legendDisplay})`);
 
                 const detailsList = Array.from(desktopContainer.querySelectorAll('details'));
                 savedDetailsStates = detailsList.map(d => ({ el: d, open: d.open }));
@@ -18521,17 +18694,103 @@
             }
         });
 
+        await runTestCase("Barre du haut : boutons Aide, Réglages et Analyse", () => {
+            const btnHelp = document.querySelector('.top-navbar #btn-nav-help');
+            const btnSettings = document.querySelector('.top-navbar #btn-nav-settings') || document.querySelector('.top-navbar #btn-nav-prefs');
+            const btnDrawer = document.querySelector('.top-navbar #btn-nav-drawer');
+            assert(btnHelp !== null, "#btn-nav-help doit exister dans .top-navbar");
+            assert(btnSettings !== null, "#btn-nav-settings doit exister dans .top-navbar");
+            assert(btnDrawer !== null, "#btn-nav-drawer doit exister dans .top-navbar");
+
+            const overlay = document.getElementById('help-overlay');
+            assert(overlay !== null, "#help-overlay doit exister");
+
+            try {
+                btnHelp.click();
+                assert(overlay.style.display === 'flex', "Un clic sur #btn-nav-help doit afficher #help-overlay en display 'flex'");
+                closeHelpModal();
+                assert(overlay.style.display === 'none', "closeHelpModal() doit refermer #help-overlay");
+                return "Boutons Aide, Réglages et Analyse présents, ouverture et fermeture de l'aide validées";
+            } finally {
+                closeHelpModal();
+            }
+        });
+
+        await runTestCase("Fenêtre Réglages : ouverture, pause du minuteur, fermeture par Échap", () => {
+            const savedState = gameState;
+            const savedTimer = timerEnabled;
+            const openSettingsPanelFn = window.openSettingsPanel || window.openPrefsModal || (typeof openPrefsModal === 'function' ? openPrefsModal : () => {});
+            const closeSettingsPanelFn = window.closeSettingsPanel || window.closePrefsModal || (typeof closePrefsModal === 'function' ? closePrefsModal : () => {});
+            const settingsOverlay = document.getElementById('settings-overlay') || document.getElementById('prefs-modal-overlay');
+            assert(settingsOverlay !== null, "#settings-overlay doit exister");
+
+            try {
+                gameState = 'PLAYER_TURN';
+                timerEnabled = true;
+                startTurnTimer(true);
+
+                openSettingsPanelFn();
+                assert(settingsOverlay.style.display === 'flex', "#settings-overlay doit être en display 'flex'");
+                assert(turnTimerInterval === null, "Le minuteur doit être en pause (turnTimerInterval === null)");
+
+                window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+                assert(settingsOverlay.style.display === 'none', "#settings-overlay doit être en display 'none'");
+                assert(turnTimerInterval !== null, "Le minuteur doit avoir repris (turnTimerInterval !== null)");
+
+                const desktopContent = document.getElementById('desktop-analysis-content');
+                const cardSettings = desktopContent ? desktopContent.querySelector('.card-settings') : null;
+                assert(cardSettings === null, "#desktop-analysis-content ne doit plus contenir d'élément .card-settings");
+
+                return "Ouverture avec pause du minuteur, fermeture par Échap avec reprise, et .card-settings absent du panneau desktop";
+            } finally {
+                closeSettingsPanelFn();
+                stopTurnTimer();
+                gameState = savedState;
+                timerEnabled = savedTimer;
+            }
+        });
+
+        await runTestCase("Aide : bloc L'essentiel, rubriques fermées et À propos", () => {
+            const helpOverlay = document.getElementById('help-overlay');
+            assert(helpOverlay !== null, "#help-overlay doit exister");
+
+            try {
+                openHelpModal();
+                const helpQuick = helpOverlay.querySelector('.help-quick');
+                const firstDetails = helpOverlay.querySelector('details.help-section');
+                assert(helpQuick !== null, ".help-quick doit exister dans #help-overlay");
+                assert(firstDetails !== null, "details.help-section doit exister dans #help-overlay");
+                assert(!!(helpQuick.compareDocumentPosition(firstDetails) & Node.DOCUMENT_POSITION_FOLLOWING), ".help-quick doit précéder le premier details.help-section");
+
+                const allDetails = helpOverlay.querySelectorAll('details.help-section');
+                assert(allDetails.length > 0, "Des rubriques details.help-section doivent exister");
+                for (const d of allDetails) {
+                    assert(d.open === false, "Toutes les rubriques details.help-section doivent avoir open === false");
+                }
+
+                const helpAbout = document.getElementById('help-about');
+                assert(helpAbout !== null && helpAbout.textContent.includes("Sébastien Lecointre"), "#help-about doit contenir « Sébastien Lecointre »");
+
+                return ".help-quick précède les sections, tous les détails fermés, mention de l'auteur dans #help-about vérifiée";
+            } finally {
+                closeHelpModal();
+            }
+        });
+
         await runTestCase("Garde-fou : aucune fenêtre plein écran laissée ouverte par les tests", () => {
             const goOverlay = document.getElementById('game-over-overlay');
             const starterOverlay = document.getElementById('starter-draw-overlay');
             const settingsOverlay = document.getElementById('welcome-settings-overlay');
+            const panelSettingsOverlay = document.getElementById('settings-overlay') || document.getElementById('prefs-modal-overlay');
             assert(goOverlay !== null, "#game-over-overlay doit exister");
             assert(starterOverlay !== null, "#starter-draw-overlay doit exister");
             assert(settingsOverlay !== null, "#welcome-settings-overlay doit exister");
+            assert(panelSettingsOverlay !== null, "#settings-overlay doit exister");
 
             assert(window.getComputedStyle(goOverlay).display === 'none', "#game-over-overlay doit avoir display 'none'");
             assert(window.getComputedStyle(starterOverlay).display === 'none', "#starter-draw-overlay doit avoir display 'none'");
             assert(window.getComputedStyle(settingsOverlay).display === 'none', "#welcome-settings-overlay doit avoir display 'none'");
+            assert(window.getComputedStyle(panelSettingsOverlay).display === 'none', "#settings-overlay doit avoir display 'none'");
             return "Toutes les fenêtres plein écran sont bien fermées";
         });
 
@@ -18882,14 +19141,73 @@
     }
 </script>
 <script>
-  if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js')
-        .then((reg) => console.log('Service Worker enregistré !', reg.scope))
-        .catch((err) => console.log('Échec enregistrement:', err));
+  (function () {
+    if (!('serviceWorker' in navigator)) return;
+    if (!(location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) return;
+
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloading) return; // premier lancement : pas de rechargement
+      reloading = true;
+      location.reload();
     });
-  }
+
+    const versionOf = (w) => { try { return new URL(w.scriptURL).searchParams.get('v') || ''; } catch (e) { return ''; } };
+    const canUpdateNow = () => typeof gameState === 'undefined' || gameState === 'SETUP' || gameState === 'GAME_OVER';
+    const activate = (w) => w.postMessage({ type: 'SKIP_WAITING' });
+
+    function showUpdateBanner(w) {
+      if (document.getElementById('update-banner')) return;
+      const b = document.createElement('div');
+      b.id = 'update-banner';
+      b.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);top:calc(8px + env(safe-area-inset-top,0px));z-index:2600;background:var(--surface);color:var(--text);border:1px solid var(--accent-gold);border-radius:12px;padding:6px 10px;display:flex;gap:8px;align-items:center;font-size:0.82rem;box-shadow:0 8px 24px rgba(0,0,0,.5);max-width:calc(100vw - 16px);';
+      const v = versionOf(w);
+      b.innerHTML = '<span><i class="fa-solid fa-arrows-rotate" style="color:var(--accent-gold);"></i> Nouvelle version' + (v ? ' v' + v : '') + '</span>';
+      const ok = document.createElement('button');
+      ok.className = 'btn-game primary';
+      ok.style.cssText = 'min-height:34px;height:34px;font-size:0.8rem;padding:0 10px;';
+      ok.textContent = 'Mettre à jour';
+      ok.onclick = () => {
+        if (!canUpdateNow() && !confirm('La manche en cours sera recommencée. Mettre à jour maintenant ?')) return;
+        activate(w);
+      };
+      const later = document.createElement('button');
+      later.className = 'btn-game secondary';
+      later.style.cssText = 'min-height:34px;height:34px;font-size:0.8rem;padding:0 10px;';
+      later.textContent = 'Plus tard';
+      later.onclick = () => b.remove(); // s'installera au prochain lancement
+      b.append(ok, later);
+      document.body.appendChild(b);
+    }
+
+    function onUpdateReady(w) {
+      if (canUpdateNow()) activate(w); else showUpdateBanner(w);
+    }
+
+    window.addEventListener('load', async () => {
+      try {
+        const reg = await navigator.serviceWorker.register('./sw.js?v=' + encodeURIComponent(APP_VERSION), { updateViaCache: 'none' });
+        if (reg.waiting && navigator.serviceWorker.controller) onUpdateReady(reg.waiting);
+        reg.addEventListener('updatefound', () => {
+          const nw = reg.installing;
+          if (!nw) return;
+          nw.addEventListener('statechange', () => {
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) onUpdateReady(nw);
+          });
+        });
+        // Recherche de mise à jour au retour dans l'appli et toutes les 30 min
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') reg.update().catch(() => {});
+        });
+        setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000);
+      } catch (err) {
+        console.log('Échec enregistrement du service worker :', err);
+      }
+    });
+  })();
 </script>
+
 <script>
     // Surlignage bleu (.drop-suggest) : seulement avec les Aides, et priorité aux nouvelles lignes du tour
     let refiningDropSuggest = false;
@@ -18921,6 +19239,5 @@
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
     })();
 </script>
-
 </body>
 </html>
