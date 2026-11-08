@@ -1380,11 +1380,9 @@
             background: var(--success-bg);
             color: var(--success-text);
         }
-        .dash-sparkline-wrap {
-            margin-top: 2px;
-            height: 32px;
-            width: 100%;
-        }
+        .dash-sparkline-wrap { margin-top: 4px; height: 84px; width: 100%; }
+        .dash-hints { display: flex; flex-direction: column; gap: 2px; font-size: 0.74rem; margin-top: 4px; color: var(--text-muted); }
+        .dash-hints strong { color: var(--text); }
         .dash-pioche-line, .dash-hand-line, .dash-match-line {
             display: flex;
             justify-content: space-between;
@@ -1939,6 +1937,8 @@
         .seg-item:hover span {
             color: var(--text);
         }
+        .segmented-control.seg-levels { flex-wrap: wrap; justify-content: flex-end; }
+        .segmented-control.seg-levels .seg-item span { padding: 4px 5px !important; font-size: 0.7rem !important; min-height: 28px; }
         .seg-item span span { padding: 0; min-height: 0; border: 0; background: none; box-shadow: none; color: inherit; }
         #welcome-settings-overlay .segmented-control .seg-item span span { padding: 0; }
         .seg-item input[type="radio"]:checked + span,
@@ -2691,6 +2691,11 @@
         .help-footer-credit { margin: 12px 0 0; text-align: center; font-size: 0.72rem; color: var(--text-muted); }
 
 
+            #app-confirm-overlay { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); z-index: 20000; align-items: center; justify-content: center; padding: 16px; }
+        #app-confirm-overlay .app-confirm-card { max-width: 380px; width: 100%; gap: 14px; }
+        #app-confirm-overlay .app-confirm-msg { white-space: pre-line; margin: 0; font-size: 0.92rem; line-height: 1.45; color: var(--text); }
+        #app-confirm-overlay .app-confirm-actions { display: flex; gap: 8px; }
+        #app-confirm-overlay .app-confirm-actions .btn-game { flex: 1; min-height: 44px; }
     </style>
 </head>
 <body>
@@ -2883,10 +2888,12 @@
         <div style="display:flex; flex-direction:column; gap:10px; margin:4px 0;">
             <div style="display:flex; justify-content:space-between; align-items:center; min-height:44px; gap:8px;">
                 <label><span data-i18n="opt_level">Niveau</span></label>
-                <div class="segmented-control" role="radiogroup">
+                <div class="segmented-control seg-levels" role="radiogroup">
+                    <label class="seg-item"><input type="radio" name="welcome-ai" value="debutant" onchange="onWelcomeAiSelectChange(this.value)"><span data-i18n="opt_beginner">Débutant</span></label>
                     <label class="seg-item"><input type="radio" name="welcome-ai" value="facile" onchange="onWelcomeAiSelectChange(this.value)"><span data-i18n="opt_easy">Facile</span></label>
                     <label class="seg-item"><input type="radio" name="welcome-ai" value="normal" onchange="onWelcomeAiSelectChange(this.value)"><span data-i18n="opt_normal">Normal</span></label>
                     <label class="seg-item"><input type="radio" name="welcome-ai" value="expert" onchange="onWelcomeAiSelectChange(this.value)"><span data-i18n="opt_expert">Expert</span></label>
+                    <label class="seg-item"><input type="radio" name="welcome-ai" value="maitre" onchange="onWelcomeAiSelectChange(this.value)"><span data-i18n="opt_master">Maître</span></label>
                 </div>
             </div>
             <div id="welcome-ai-desc" style="font-size:0.75rem; color:var(--text-muted); margin-top:-6px; margin-bottom:2px;"></div>
@@ -3070,7 +3077,7 @@
                 <ul>
                     <li>Il remplace n'importe quelle tuile ; sa valeur s'affiche dans un petit badge sur la tuile.</li>
                     <li>Dans une suite, déposez-le au début ou à la fin pour choisir sa place. Si plusieurs valeurs sont possibles, choisissez avec les boutons « Joker = ».</li>
-                    <li>Après votre ouverture, vous pouvez récupérer un joker de la table en le remplaçant par une tuile (de votre chevalet ou de la table) qui garde la combinaison valide ; dans une série de 3, n'importe laquelle des couleurs manquantes convient. Le joker doit être rejoué dans le même tour pour former une nouvelle combinaison, et vous devez aussi poser au moins une tuile de votre chevalet.</li>
+                    <li>Après votre ouverture, les jokers de la table se déplacent librement, comme les autres tuiles : vous pouvez les réutiliser dans n'importe quelle combinaison. Le coup est valide si, à la fin du tour, toutes les combinaisons sont correctes (au moins 3 tuiles), aucune tuile n'est isolée, et vous avez posé au moins une tuile de votre chevalet. Un joker de la table ne revient jamais dans votre chevalet.</li>
                     <li>Un joker resté dans votre main en fin de manche vaut 30 points.</li>
                 </ul>
             </div>
@@ -3097,6 +3104,7 @@
                     <li>La <strong>barre de messages</strong>, en haut de la table, indique à qui c'est le tour et le dernier événement. Touchez-la pour ouvrir l'historique complet (filtres Vous, IA, Alertes).</li>
                     <li>Après le coup de l'IA, un panneau violet le résume. « Revoir » ou le bouton <i class="fa-solid fa-clock-rotate-left"></i> <strong>Dernier coup</strong> rejoue son animation. Les tuiles posées par l'IA portent un badge « IA ».</li>
                     <li>La tuile que vous venez de piocher est entourée en cyan.</li>
+                    <li>En fin de manche, la table reste affichée quelques secondes avant le bilan, pour voir le dernier coup.</li>
                 </ul>
             </div>
         </details>
@@ -3106,8 +3114,8 @@
             <div class="help-body">
                 <ul>
                     <li><span class="help-key">?</span> ouvre cette aide à tout moment (sur ordinateur : touche ?).</li>
-                    <li><i class="fa-solid fa-gear"></i> <strong>Réglages</strong>, en haut à droite : niveau de l'IA, minuteur, aides, zoom automatique, mode daltonien, affichage, zoom, historique, nouveau match et « Réafficher les astuces ».</li>
-                    <li><i class="fa-solid fa-chart-pie"></i> <strong>Analyse</strong> : sur ordinateur, le panneau de droite (⇤ le replie) ; sur téléphone, le bouton en haut à droite. Vous y trouvez la carte <strong>Partie</strong> (tuiles de chacun, courbe, pioche, vos points en main), <strong>« Tuiles déjà sorties »</strong> (sur la table, dans votre main ou inconnues, plus les jokers) et le score du <strong>Match</strong>.</li>
+                    <li><i class="fa-solid fa-gear"></i> <strong>Réglages</strong>, en haut à droite : niveau de l'IA (5 niveaux, de Débutant à Maître), langue, minuteur, aides, zoom automatique, mode daltonien, affichage, zoom, historique, nouveau match et « Réafficher les astuces ».</li>
+                    <li><i class="fa-solid fa-chart-pie"></i> <strong>Statistiques</strong> : sur ordinateur, le panneau de droite (⇤ le replie) ; sur téléphone, le bouton en haut à droite. La carte <strong>Partie</strong> montre les tuiles de chacun, la courbe d'évolution, la pioche et vos points en main, ainsi que deux repères : avant votre ouverture, la meilleure ouverture possible dans votre main (sur 30) ; ensuite, vos tuiles isolées et le rythme de chacun sur 3 tours. Viennent ensuite <strong>« Tuiles déjà sorties »</strong> (sur la table, dans votre main ou inconnues, plus les jokers) et le score du <strong>Match</strong>.</li>
                 </ul>
 
             </div>
@@ -3200,7 +3208,7 @@
                         <ul>
                             <li>It substitutes for any tile; its value is shown in a small badge on the tile.</li>
                             <li>In a run, drop it at the beginning or end to choose its position. If multiple values are possible, choose with the "Joker =" buttons.</li>
-                            <li>After your initial meld, you can retrieve a Joker from the board by replacing it with any tile (from your rack or from the board) that keeps the set valid; in a group of three, either missing color works. The Joker must be replayed in the same turn to make a new set, and you must also play at least one tile from your rack.</li>
+                            <li>After your initial meld, Jokers on the board can be moved freely, like any other tile: you can reuse them in any set. The move is valid if, at the end of your turn, every set is correct (at least 3 tiles), no tile is left on its own, and you have played at least one tile from your rack. A Joker from the board never goes back to your rack.</li>
                             <li>A Joker left in your hand at the end of a round is worth 30 penalty points.</li>
                         </ul>
                     </div>
@@ -3225,6 +3233,7 @@
                             <li>The <strong>message ticker</strong> at the top of the board shows whose turn it is and the last event. Tap it to open the full message history (filters You, AI, Alerts).</li>
                             <li>After the AI moves, a purple panel summarizes it. "Replay" or the <i class="fa-solid fa-clock-rotate-left"></i> <strong>Last Move</strong> button replays its animation. Tiles played by the AI carry an "AI" badge.</li>
                             <li>The tile you just drew is highlighted in cyan.</li>
+                    <li>At the end of a round, the board stays visible for a few seconds before the summary, so you can see the last move.</li>
                         </ul>
                     </div>
                 </details>
@@ -3233,8 +3242,8 @@
                     <div class="help-body">
                         <ul>
                             <li><span class="help-key">?</span> opens this help at any time (on desktop: ? key).</li>
-                            <li><i class="fa-solid fa-gear"></i> <strong>Settings</strong> at the top right: AI level, timer, hints, auto zoom, colorblind mode, layout, zoom, history, new match, and "Reset tips".</li>
-                            <li><i class="fa-solid fa-chart-pie"></i> <strong>Statistics</strong>: on desktop, the right sidebar (⇤ collapses it); on mobile, the top right button. You will find the <strong>Game</strong> card (tile counts, graph, pool, your points in hand), <strong>"Played tiles"</strong> (on board, in your hand, or unknown, plus Jokers) and the <strong>Match</strong> score.</li>
+                            <li><i class="fa-solid fa-gear"></i> <strong>Settings</strong> at the top right: AI level (5 levels, from Beginner to Master), language, timer, hints, auto zoom, colorblind mode, layout, zoom, history, new match, and "Reset tips".</li>
+                            <li><i class="fa-solid fa-chart-pie"></i> <strong>Statistics</strong>: on desktop, the right sidebar (⇤ collapses it); on mobile, the top right button. The <strong>Game</strong> card shows each player's tiles, the trend graph, the pool and your points in hand, plus two markers: before your initial meld, the best opening in your hand (out of 30); afterwards, your isolated tiles and each player's pace over 3 turns. Then come <strong>"Played tiles"</strong> (on board, in your hand, or unknown, plus Jokers) and the <strong>Match</strong> score.</li>
                         </ul>
                     </div>
                 </details>
@@ -3322,7 +3331,7 @@
                         <ul>
                             <li>Sustituye a cualquier ficha; su valor se muestra en una pequeña insignia en la ficha.</li>
                             <li>En una escalera, colócalo al principio o al final para elegir su posición. Si son posibles varios valores, elígelo con los botones «Comodín =».</li>
-                            <li>Tras tu apertura, puedes recuperar un comodín de la mesa sustituyéndolo por una ficha (de tu atril o de la mesa) que mantenga la combinación válida; en un grupo de tres sirve cualquiera de los colores que faltan. El comodín debe volver a jugarse en el mismo turno para formar una nueva combinación y también debes colocar al menos una ficha de tu atril.</li>
+                            <li>Tras tu apertura, los comodines de la mesa se mueven libremente, como cualquier otra ficha: puedes reutilizarlos en cualquier combinación. La jugada es válida si, al final del turno, todas las combinaciones son correctas (al menos 3 fichas), ninguna ficha queda suelta y has colocado al menos una ficha de tu atril. Un comodín de la mesa nunca vuelve a tu atril.</li>
                             <li>Un comodín que quede en tu mano al final de la ronda vale 30 puntos de penalización.</li>
                         </ul>
                     </div>
@@ -3347,6 +3356,7 @@
                             <li>La <strong>barra de mensajes</strong> en la parte superior de la mesa indica de quién es el turno y el último evento. Tócala para abrir el historial completo (filtros Tú, IA, Alertas).</li>
                             <li>Tras la jugada de la IA, un panel morado la resume. «Repetir» o el botón <i class="fa-solid fa-clock-rotate-left"></i> <strong>Último movimiento</strong> reproduce su animación. Las fichas jugadas por la IA llevan una etiqueta «IA».</li>
                             <li>La ficha que acabas de robar se resalta en cian.</li>
+                    <li>Al final de una ronda, la mesa permanece visible unos segundos antes del resumen, para ver la última jugada.</li>
                         </ul>
                     </div>
                 </details>
@@ -3355,8 +3365,8 @@
                     <div class="help-body">
                         <ul>
                             <li><span class="help-key">?</span> abre esta ayuda en cualquier momento (en ordenador: tecla ?).</li>
-                            <li><i class="fa-solid fa-gear"></i> <strong>Ajustes</strong> arriba a la derecha: nivel de la IA, temporizador, ayudas, zoom automático, modo daltónico, diseño, zoom, historial, nueva partida y «Restablecer pistas».</li>
-                            <li><i class="fa-solid fa-chart-pie"></i> <strong>Estadísticas</strong>: en ordenador, la barra lateral derecha (⇤ la pliega); en móvil, el botón superior derecho. Encontrarás la tarjeta <strong>Partida</strong> (recuento de fichas, gráfico, pozo, tus puntos en mano), <strong>«Fichas jugadas»</strong> (en mesa, en mano o desconocidas, más comodines) y la puntuación de la <strong>Partida</strong>.</li>
+                            <li><i class="fa-solid fa-gear"></i> <strong>Ajustes</strong> arriba a la derecha: nivel de la IA (5 niveles, de Principiante a Maestro), idioma, temporizador, ayudas, zoom automático, modo daltónico, diseño, zoom, historial, nueva partida y «Restablecer pistas».</li>
+                            <li><i class="fa-solid fa-chart-pie"></i> <strong>Estadísticas</strong>: en ordenador, la barra lateral derecha (⇤ la pliega); en móvil, el botón superior derecho. La tarjeta <strong>Partida</strong> muestra las fichas de cada uno, el gráfico de evolución, el pozo y tus puntos en mano, además de dos indicadores: antes de tu apertura, la mejor apertura posible en tu atril (sobre 30); después, tus fichas aisladas y el ritmo de cada uno en 3 turnos. Después vienen <strong>«Fichas jugadas»</strong> (en mesa, en mano o desconocidas, más comodines) y la puntuación de la <strong>Partida</strong>.</li>
                         </ul>
                     </div>
                 </details>
@@ -3481,10 +3491,12 @@
         <div class="card-settings" style="display:flex; flex-direction:column; gap:6px; font-size:0.82rem;">
             <div style="display:flex; justify-content:space-between; align-items:center; min-height:36px; gap:6px;">
                 <label><span data-i18n="opt_level">Niveau</span></label>
-                <div class="segmented-control" role="radiogroup" style="padding:1px; gap:1px;">
+                <div class="segmented-control seg-levels" role="radiogroup" style="padding:1px; gap:1px;">
+                    <label class="seg-item" style="padding:0;"><input type="radio" name="setting-ai" value="debutant" onchange="onSettingsAiLevelChange(this.value)"><span style="padding:3px 6px; min-height:28px; font-size:0.75rem;" data-i18n="opt_beginner">Débutant</span></label>
                     <label class="seg-item" style="padding:0;"><input type="radio" name="setting-ai" value="facile" onchange="onSettingsAiLevelChange(this.value)"><span style="padding:3px 6px; min-height:28px; font-size:0.75rem;" data-i18n="opt_easy">Facile</span></label>
                     <label class="seg-item" style="padding:0;"><input type="radio" name="setting-ai" value="normal" onchange="onSettingsAiLevelChange(this.value)"><span style="padding:3px 6px; min-height:28px; font-size:0.75rem;" data-i18n="opt_normal">Normal</span></label>
                     <label class="seg-item" style="padding:0;"><input type="radio" name="setting-ai" value="expert" onchange="onSettingsAiLevelChange(this.value)"><span style="padding:3px 6px; min-height:28px; font-size:0.75rem;" data-i18n="opt_expert">Expert</span></label>
+                    <label class="seg-item" style="padding:0;"><input type="radio" name="setting-ai" value="maitre" onchange="onSettingsAiLevelChange(this.value)"><span style="padding:3px 6px; min-height:28px; font-size:0.75rem;" data-i18n="opt_master">Maître</span></label>
                 </div>
             </div>
             <div class="setting-ai-desc" style="font-size:0.75rem; color:var(--text-muted); margin-top:-4px;"></div>
@@ -3738,7 +3750,7 @@
 			tile_joker_short: "Joker", sum_new_run: "Pose d'une suite {tiles}", sum_joker_replaces: "le Joker remplace le {value} {color}", sum_new_group: "Pose d'une série {tiles}", sum_joker_color: "le Joker prend la couleur {color}", sum_added_joker_value: "Joker (remplace le {value} {color})", sum_added_joker_color: "Joker (prend la couleur {color})", sum_extend_run: "Extension de la suite {old} avec le {added}.", sum_extend_group: "Extension de la série {old} avec le {added}.", sum_and_the: " et le ",
 			confirm_change_rounds: "Une partie est en cours. Changer le nombre de manches va redémarrer le match. Voulez-vous continuer ?", log_match_configured_one: "Match configuré en {count} manche.", log_match_configured_other: "Match configuré en {count} manches.",
 			confirm_new_match: "Une partie est en cours. Voulez-vous relancer un nouveau match ?", confirm_new_match_settings: "Une partie est en cours. Voulez-vous relancer un nouveau match avec ces paramètres ?", btn_continue_round_n: "Continuer la manche {current}/{total}",
-			ai_desc_easy: "Ajouts simples, rate parfois un coup", ai_desc_normal: "Cherche le coup qui pose le plus de tuiles", ai_desc_expert: "Stratégique : peut garder son joker ou retarder son ouverture", msg_autofit_on: "Zoom automatique activé", msg_autofit_off: "Zoom automatique désactivé",
+			opt_beginner: "Débutant", opt_master: "Maître", ai_desc_beginner: "Joue simplement et rate souvent des coups : idéal pour découvrir", ai_desc_master: "Trouve toujours le meilleur coup et surveille de près votre fin de partie", dash_opening_hand: "Meilleure ouverture dans votre main", dash_isolated: "Tuiles isolées (sans partenaire)", dash_pace: "Rythme sur 3 tours", dash_pace_hint: "Variation du nombre de tuiles en main sur les 3 derniers tours (négatif = on se rapproche de la victoire)", dash_isolated_hint: "Tuiles sans autre tuile de même valeur ni de même couleur proche dans votre main : à placer sur la table en priorité", dlg_confirm: "Confirmer", dlg_cancel: "Annuler", dlg_split: "Couper la suite", go_pending: "Manche terminée : le bilan s'affiche dans un instant…", ai_desc_easy: "Ajoute des tuiles simplement et rate parfois un coup", ai_desc_normal: "Pose ses combinaisons et fait des réorganisations simples de la table", ai_desc_expert: "Voit presque toutes les réorganisations, gère son joker et son ouverture", msg_autofit_on: "Zoom automatique activé", msg_autofit_off: "Zoom automatique désactivé",
 			tip_layout_button: "Le bouton ▦ en haut de la table, à côté du zoom, change l'affichage du tapis.", tip_ai_few_tiles_one: "L'IA n'a plus que {count} tuile (pastille 🤖 en haut).", tip_ai_few_tiles_other: "L'IA n'a plus que {count} tuiles (pastille 🤖 en haut).", warn_ai_few_tiles_one: "Attention : l'IA n'a plus que {count} tuile", warn_ai_few_tiles_other: "Attention : l'IA n'a plus que {count} tuiles", deck_remaining_hint: "Pioche restante : {n} (≈ {turns} tour(s) avant pioche vide)", about_by: "par",
 			update_new_version: "Nouvelle version", update_now: "Mettre à jour", update_later: "Plus tard", update_confirm_restart: "La manche en cours sera recommencée. Mettre à jour maintenant ?",
 			timer_hint: "Minuteur (60 s)", round_current_hint: "Manche en cours", nav_help_hint: "Aide : comment jouer ?",
@@ -3938,7 +3950,7 @@
 			tile_joker_short: "Joker", sum_new_run: "Run {tiles} played", sum_joker_replaces: "the Joker replaces the {value} {color}", sum_new_group: "Group {tiles} played", sum_joker_color: "the Joker takes the color {color}", sum_added_joker_value: "Joker (replaces the {value} {color})", sum_added_joker_color: "Joker (takes the color {color})", sum_extend_run: "Extension of run {old} with the {added}.", sum_extend_group: "Extension of group {old} with the {added}.", sum_and_the: " and the ",
 			confirm_change_rounds: "A match is in progress. Changing the number of rounds will restart the match. Do you want to continue?", log_match_configured_one: "Match set to {count} round.", log_match_configured_other: "Match set to {count} rounds.",
 			confirm_new_match: "A match is in progress. Do you want to start a new match?", confirm_new_match_settings: "A match is in progress. Do you want to start a new match with these settings?", btn_continue_round_n: "Continue round {current}/{total}",
-			ai_desc_easy: "Simple additions, occasionally misses a move", ai_desc_normal: "Looks for the move that plays the most tiles", ai_desc_expert: "Strategic: may hold its Joker or delay its initial meld", msg_autofit_on: "Auto zoom enabled", msg_autofit_off: "Auto zoom disabled",
+			opt_beginner: "Beginner", opt_master: "Master", ai_desc_beginner: "Plays simply and often misses moves: ideal for learning", ai_desc_master: "Always finds the best move and closely watches your endgame", dash_opening_hand: "Best opening in your hand", dash_isolated: "Isolated tiles (no partner)", dash_pace: "Pace over 3 turns", dash_pace_hint: "Change in tiles in hand over the last 3 turns (negative = closer to winning)", dash_isolated_hint: "Tiles with no other tile of the same value or nearby same color in your hand: try to play them on the board first", dlg_confirm: "Confirm", dlg_cancel: "Cancel", dlg_split: "Split the run", go_pending: "Round over: the summary appears in a moment…", ai_desc_easy: "Adds tiles simply and sometimes misses a move", ai_desc_normal: "Plays its sets and makes simple rearrangements of the board", ai_desc_expert: "Sees almost every rearrangement, manages its Joker and initial meld", msg_autofit_on: "Auto zoom enabled", msg_autofit_off: "Auto zoom disabled",
 			tip_layout_button: "The ▦ button at the top of the board, next to zoom, changes the board layout.", tip_ai_few_tiles_one: "The AI only has {count} tile left (🤖 badge at the top).", tip_ai_few_tiles_other: "The AI only has {count} tiles left (🤖 badge at the top).", warn_ai_few_tiles_one: "Warning: the AI only has {count} tile left", warn_ai_few_tiles_other: "Warning: the AI only has {count} tiles left", deck_remaining_hint: "Pool remaining: {n} (≈ {turns} turn(s) before pool is empty)", about_by: "by",
 			update_new_version: "New version", update_now: "Update", update_later: "Later", update_confirm_restart: "The current round will be restarted. Update now?",
 			timer_hint: "60s Timer", round_current_hint: "Current round", nav_help_hint: "Help: how to play?",
@@ -4138,7 +4150,7 @@
 			tile_joker_short: "Comodín", sum_new_run: "Escalera {tiles} colocada", sum_joker_replaces: "el comodín sustituye al {value} {color}", sum_new_group: "Grupo {tiles} colocado", sum_joker_color: "el comodín toma el color {color}", sum_added_joker_value: "Comodín (sustituye al {value} {color})", sum_added_joker_color: "Comodín (toma el color {color})", sum_extend_run: "Ampliación de la escalera {old} con el {added}.", sum_extend_group: "Ampliación del grupo {old} con el {added}.", sum_and_the: " y el ",
 			confirm_change_rounds: "Hay una partida en curso. Cambiar el número de rondas reiniciará la partida. ¿Quieres continuar?", log_match_configured_one: "Partida configurada a {count} ronda.", log_match_configured_other: "Partida configurada a {count} rondas.",
 			confirm_new_match: "Hay una partida en curso. ¿Quieres reiniciar una nueva partida?", confirm_new_match_settings: "Hay una partida en curso. ¿Quieres reiniciar una nueva partida con estos ajustes?", btn_continue_round_n: "Continuar ronda {current}/{total}",
-			ai_desc_easy: "Colocaciones simples, a veces pierde una jugada", ai_desc_normal: "Busca la jugada que coloca la mayor cantidad de fichas", ai_desc_expert: "Estratégica: puede guardar su comodín o retrasar su apertura", msg_autofit_on: "Zoom automático activado", msg_autofit_off: "Zoom automático desactivado",
+			opt_beginner: "Principiante", opt_master: "Maestro", ai_desc_beginner: "Juega de forma sencilla y a menudo pierde jugadas: ideal para aprender", ai_desc_master: "Siempre encuentra la mejor jugada y vigila de cerca tu final de partida", dash_opening_hand: "Mejor apertura en tu atril", dash_isolated: "Fichas aisladas (sin compañera)", dash_pace: "Ritmo en 3 turnos", dash_pace_hint: "Variación de fichas en el atril en los últimos 3 turnos (negativo = más cerca de ganar)", dash_isolated_hint: "Fichas sin otra del mismo valor ni del mismo color cercano en tu atril: intenta colocarlas en la mesa primero", dlg_confirm: "Confirmar", dlg_cancel: "Cancelar", dlg_split: "Dividir la escalera", go_pending: "Ronda terminada: el resumen aparecerá en un momento…", ai_desc_easy: "Coloca fichas de forma sencilla y a veces pierde una jugada", ai_desc_normal: "Coloca sus combinaciones y hace reorganizaciones sencillas de la mesa", ai_desc_expert: "Ve casi todas las reorganizaciones, gestiona su comodín y su apertura", msg_autofit_on: "Zoom automático activado", msg_autofit_off: "Zoom automático desactivado",
 			tip_layout_button: "El botón ▦ en la parte superior de la mesa, junto al zoom, cambia el diseño del tapete.", tip_ai_few_tiles_one: "A la IA solo le queda {count} ficha (indicador 🤖 arriba).", tip_ai_few_tiles_other: "A la IA solo le quedan {count} fichas (indicador 🤖 arriba).", warn_ai_few_tiles_one: "Atención: a la IA solo le queda {count} ficha", warn_ai_few_tiles_other: "Atención: a la IA solo le quedan {count} fichas", deck_remaining_hint: "Pozo restante: {n} (≈ {turns} turno(s) antes de pozo vacío)", about_by: "por",
 			update_new_version: "Nueva versión", update_now: "Actualizar", update_later: "Más tarde", update_confirm_restart: "La ronda actual se reiniciará. ¿Actualizar ahora?",
 			timer_hint: "Temporizador (60 s)", round_current_hint: "Ronda actual", nav_help_hint: "Ayuda: ¿cómo jugar?",
@@ -4253,9 +4265,10 @@
     document.documentElement.lang = currentLang;
     document.addEventListener('DOMContentLoaded', updateDomTranslations);
 
-    const APP_VERSION = '2026.11.10-2'; // ← à changer à chaque mise en ligne
+    const APP_VERSION = '2026.11.12-1'; // ← à changer à chaque mise en ligne
     // Coefficients de l'IA (réglés avec index.html?bench=tune, puis recopiés ici)
     const AI_DEFAULT_WEIGHTS = { risk: 4, dead: 2, flex: 5, mc: 1 };
+    let playerPassedLastTurn = false; // le joueur a pioché au tour précédent (utilisé par le niveau Maître)
     document.addEventListener('DOMContentLoaded', () => {
         fillAboutInfo();
     });
@@ -5018,6 +5031,57 @@
             insertIntoQueue(item);
         }
     }
+    // Boîte de confirmation au style du jeu (remplace window.confirm)
+    function isUiTestMode() {
+        return gameState === 'TEST' || gameState === 'BENCH' || /[?&](test|bench)=/.test(window.location.search);
+    }
+    function appConfirm(message, opts = {}) {
+        return new Promise(resolve => {
+            let ov = document.getElementById('app-confirm-overlay');
+            if (!ov) {
+                ov = document.createElement('div');
+                ov.id = 'app-confirm-overlay';
+                ov.innerHTML = '<div class="modal-card app-confirm-card" role="alertdialog" aria-modal="true">'
+                    + '<p class="app-confirm-msg"></p>'
+                    + '<div class="app-confirm-actions"><button type="button" class="btn-game secondary app-confirm-no"></button>'
+                    + '<button type="button" class="btn-game primary app-confirm-yes"></button></div></div>';
+                document.body.appendChild(ov);
+            }
+            const yes = ov.querySelector('.app-confirm-yes'), no = ov.querySelector('.app-confirm-no');
+            ov.querySelector('.app-confirm-msg').textContent = message;
+            yes.textContent = opts.yes || t('dlg_confirm');
+            no.textContent = opts.no || t('dlg_cancel');
+            const wasPlayerTurn = (gameState === 'PLAYER_TURN');
+            if (wasPlayerTurn) pauseTurnTimer();
+            let closed = false;
+            const onKey = (e) => {
+                if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(false); }
+                else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); close(true); }
+            };
+            function close(val) {
+                if (closed) return;
+                closed = true;
+                ov.style.display = 'none';
+                document.removeEventListener('keydown', onKey, true);
+                if (wasPlayerTurn && gameState === 'PLAYER_TURN') resumeTurnTimer();
+                resolve(val);
+            }
+            yes.onclick = () => close(true);
+            no.onclick = () => close(false);
+            ov.onclick = (e) => { if (e.target === ov) close(false); };
+            document.addEventListener('keydown', onKey, true);
+            ov.style.display = 'flex';
+            requestAnimationFrame(() => yes.focus());
+        });
+    }
+    function askConfirm(message, onYes, onNo, opts = {}) {
+        if (isUiTestMode()) {
+            return window.confirm(message) ? (onYes ? onYes() : true) : (onNo ? onNo() : undefined);
+        }
+        appConfirm(message, opts).then(ok => { if (ok) { if (onYes) onYes(); } else if (onNo) onNo(); });
+        return undefined;
+    }
+
     function showOverlayReliably(overlay, focusSelector) {
         if (!overlay) return;
         overlay.style.display = 'flex';
@@ -5075,12 +5139,14 @@
         if (overlay) overlay.style.display = 'none';
         resumeTurnTimer();
     }
-    function applyWelcomeSettingsAndStart() {
+    function applyWelcomeSettingsAndStart(confirmed = false) {
         const isGameInProgress = gameState !== 'SETUP' && isMatchInProgress();
-        if (isGameInProgress && !window.confirm(t('confirm_new_match_settings'))) {
-            syncSettingsControls();
-            document.getElementById('welcome-settings-overlay').style.display = 'none';
-            resumeTurnTimer();
+        if (isGameInProgress && confirmed !== true) {
+            askConfirm(t('confirm_new_match_settings'), () => applyWelcomeSettingsAndStart(true), () => {
+                syncSettingsControls();
+                document.getElementById('welcome-settings-overlay').style.display = 'none';
+                resumeTurnTimer();
+            });
             return;
         }
         const checkedAi = document.querySelector('input[name="welcome-ai"]:checked');
@@ -5118,23 +5184,52 @@
     let tapSelectedTile = null, multiSelectedIds = [];
 
     function getAiLevelDescription(level) {
+        if (level === 'debutant') return t('ai_desc_beginner');
         if (level === 'facile') return t('ai_desc_easy');
         if (level === 'normal') return t('ai_desc_normal');
+        if (level === 'maitre') return t('ai_desc_master');
         return t('ai_desc_expert');
     }
 
     let getAiConfig = function(level) {
-        if (level === 'facile') {
-            return { profile: 'facile', aiStyle: 'play_now', budgetMs: 300, minThinkMs: 700 };
+        switch (level) {
+            case 'debutant': return { profile: 'facile', aiStyle: 'play_now', budgetMs: 300, minThinkMs: 900, missRate: 0.5 };
+            case 'facile':   return { profile: 'facile', aiStyle: 'play_now', budgetMs: 300, minThinkMs: 700, missRate: 0.25 };
+            case 'normal':   return { profile: 'normal', aiStyle: 'play_now', budgetMs: 1000, minThinkMs: 1200, visionMiss: 1 };   // ne voit que les réorganisations simples
+            case 'maitre':   return { profile: 'expert', aiStyle: 'strategic', budgetMs: 2000, minThinkMs: 2000, mcSamples: 16, mcMaxOpp: 9, inference: true, weights: { future: 0 } }; // future désactivé : le tournoi (17-23 contre Expert) a montré qu'il n'apportait rien
+            default:         return { profile: 'expert', aiStyle: 'strategic', budgetMs: 1500, minThinkMs: 1800, mcSamples: 10, mcMaxOpp: 6, visionMiss: 0.2 }; // 1 tour sur 5 en vision simple
         }
-        if (level === 'normal') {
-            return { profile: 'normal', aiStyle: 'play_now', budgetMs: 1000, minThinkMs: 1200 };
-        }
-        return { profile: 'expert', aiStyle: 'strategic', budgetMs: 1500, minThinkMs: 1800 };
     };
+    const AI_LEVELS = ['debutant', 'facile', 'normal', 'expert', 'maitre'];
+    function aiLevelLabel(level) {
+        return ({ debutant: t('opt_beginner'), facile: t('opt_easy'), normal: t('opt_normal'), expert: t('opt_expert'), maitre: t('opt_master') })[level] || t('opt_expert');
+    }
+    function buildAiSolveOptions(level, ctx) {
+        const cfg = getAiConfig(level);
+        return {
+            profile: cfg.profile,
+            aiStyle: cfg.aiStyle,
+            budgetMs: ctx.budgetMs,
+            opponentHandCount: ctx.opponentHandCount,
+            poolCount: ctx.poolCount,
+            unknownCounts: ctx.unknownCounts,
+            weights: Object.assign({}, loadAiWeights(), cfg.weights || {}),
+            missRate: cfg.missRate,
+            mcSamples: cfg.mcSamples,
+            mcMaxOpp: cfg.mcMaxOpp,
+            oppPassed: !!(cfg.inference && ctx.oppPassed),
+            oppOpened: !!ctx.oppOpened,
+            holdBackCount: ctx.holdBackCount || 0,
+            consecutiveMissCount: ctx.consecutiveMissCount || 0,
+            randomMiss: cfg.profile === 'facile' ? (ctx.rng ? ctx.rng() : Math.random()) : undefined,
+            limitedVision: cfg.visionMiss ? ((ctx.rng ? ctx.rng() : Math.random()) < cfg.visionMiss) : false
+        };
+    }
+
 
     function getAiBudget(level, tableTileCount, opponentHandCount) {
-        if (level === 'facile') return 300;
+        if (level === 'facile' || level === 'debutant') return 300;
+        if (level === 'maitre') return Math.round(getAiBudget('expert', tableTileCount, opponentHandCount) * 1.3);
         if (tableTileCount >= 60) return level === 'normal' ? 4500 : 7000;
         const isLate = (tableTileCount >= 40 || opponentHandCount <= 5);
         const isMid = (tableTileCount >= 20 && tableTileCount < 40);
@@ -5454,13 +5549,7 @@
                 const dest = where.get(jid);
                 if (dest === origRowId) continue;
                 if (!isOpened) return false; // pas de récupération de joker avant l'ouverture
-                const destTiles = rowsAfter.get(dest);
-                if (!destTiles) return false;
-                // Règle officielle : le joker doit former une NOUVELLE combinaison
-                for (let r of board) {
-                    if (r.id === origRowId || r.tiles.length === 0) continue;
-                    if (r.tiles.every(tl => destTiles.has(tl.id))) return false;
-                }
+                // Règle d'or : après l'ouverture, le joker se déplace librement (validité finale contrôlée ailleurs)
             }
             return true;
         }
@@ -5690,7 +5779,7 @@
                                 }
                             }
                         }
-                        if (false && !rep) { // désactivé : le joker libéré doit former une nouvelle combinaison (règle officielle)
+                        if (!rep) {
                             for (let a = 0; a < remH.length; a++) {
                                 for (let R2 of curRows) {
                                     if (R2.id === R.id) continue;
@@ -6024,7 +6113,7 @@
             const isEndGameUrgent = (opponentHandCount <= 4) || (poolCount !== null && poolCount === 0);
             const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
             const r = Math.max(clamp((8 - opponentHandCount) / 6, 0, 1), poolCount === 0 ? 1 : clamp((20 - (poolCount ?? 30)) / 20, 0, 1));
-            const AIW = Object.assign({ risk: 4, dead: 2, flex: 5, mc: 1 }, options.weights || {});
+            const AIW = Object.assign({ risk: 4, dead: 2, flex: 5, mc: 1, future: 0 }, options.weights || {});
             const unknownCounts = options.unknownCounts ? new Uint8Array(options.unknownCounts) : null;
             const allowStrategicHolds = (aiStyle === 'strategic') && !options.forcePlay;
             const holdPossible = allowStrategicHolds && profile === 'expert' && hand.some(t => t.isJoker) && opponentHandCount >= 8 && (poolCount === null || poolCount > 10);
@@ -6094,7 +6183,8 @@
             // 2. PROFIL FACILE (ajouts simples directs avec contrôle du random miss consécutif)
             if (profile === 'facile' && options.forcePlay !== true) {
                 const canMiss = ((options.consecutiveMissCount || 0) === 0);
-                const shouldMissDirect = canMiss && (options.randomMiss !== undefined ? options.randomMiss < 0.25 : Math.random() < 0.25);
+                const missRate = (typeof options.missRate === 'number') ? options.missRate : 0.25;
+                const shouldMissDirect = canMiss && (options.randomMiss !== undefined ? options.randomMiss < missRate : Math.random() < missRate);
                 let directSteps = [];
                 for (let t of hand) {
                     for (let r of currentBoard) {
@@ -6124,7 +6214,7 @@
                     candidatesEvaluated++;
                     const steps = buildStepsFromChosenMelds(pureOpen, hand, currentBoard);
                     if (checkJokerRuleR11(steps, currentBoard, hand, isOpened)) {
-                        const shouldMissPure = canMiss && (Math.random() < 0.3);
+                        const shouldMissPure = canMiss && (Math.random() < Math.min(0.9, missRate + 0.05));
                         if (shouldMissPure) {
                             return { steps: [], solutionMelds: [], isOpening: false, score: 0, status: 'no_moves', reason: 'random_miss', timedOut: false, candidatesEvaluated, filteredByR11, source: null, remainingPoints: 0, flexibility: 0 };
                         }
@@ -6134,6 +6224,26 @@
                     }
                 }
                 return { steps: [], solutionMelds: [], isOpening: false, score: 0, status: 'no_moves', reason: 'no_legal_move', timedOut: false, candidatesEvaluated, filteredByR11, source: null, remainingPoints: 0, flexibility: 0 };
+            }
+
+            // 2 bis. VISION LIMITÉE (Normal, et Expert 1 tour sur 5) : coups locaux + combinaisons tirées de la main,
+            // sans la grande réorganisation de la table. Garantit l'écart de niveau avec Expert et Maître.
+            if (options.limitedVision === true && isOpened && options.forcePlay !== true) {
+                const tacL = findTacticalMoves(hand, currentBoard, { endGame: isEndGameUrgent });
+                let stepsL = (tacL && tacL.steps) ? tacL.steps.slice() : [];
+                const placedL = new Set(stepsL.filter(s => s.action === 'place_from_hand').map(s => s.tileId));
+                const remL = hand.filter(tl => !placedL.has(tl.id));
+                const handMeldsL = solveHandOnlyMelds(remL).map(s => (typeof s.toLineId === 'string' && s.toLineId.startsWith('new-'))
+                    ? Object.assign({}, s, { toLineId: 'new-h' + s.toLineId.slice(4) }) : s);
+                stepsL = stepsL.concat(handMeldsL);
+                if (stepsL.length > 0) {
+                    candidatesEvaluated++;
+                    if (checkJokerRuleR11(stepsL, currentBoard, hand, true)) {
+                        return { steps: stepsL, solutionMelds: [], isOpening: false, score: 0, status: 'ok', reason: null, timedOut: false, candidatesEvaluated, filteredByR11, source: 'limited', remainingPoints: 0, flexibility: 0 };
+                    }
+                    filteredByR11++;
+                }
+                return { steps: [], solutionMelds: [], isOpening: false, score: 0, status: 'no_moves', reason: 'no_legal_move', timedOut: false, candidatesEvaluated, filteredByR11, source: 'limited', remainingPoints: 0, flexibility: 0 };
             }
 
             // 3. SOLVEUR MULTI-PALIERS (Normal & Expert)
@@ -6395,7 +6505,7 @@
             // Solveur par valeurs : rapide même avec une table très chargée
             let dpOptimal = false;
             if (!options.skipDp && isOpened) {
-                const dpDeadline = startTime + 0.45 * budgetMs;
+                const dpDeadline = startTime + (AIW.future > 0 ? 0.55 : 0.45) * budgetMs;
                 const tacIds = (tactical && tactical.placed > 0) ? new Set(tactical.steps.filter(s => s.action === 'place_from_hand').map(s => s.tileId)) : null;
                 const tacTypes = tacIds ? hand.filter(tl => tacIds.has(tl.id)).map(tl => tileToType(tl)) : null;
                 const variants = [{ hc: handCounts, r: 0, full: true }];
@@ -6409,6 +6519,21 @@
                     if (!dp) continue;
                     if (dp.placed > 0) candidateSolutions.push({ cand: dp.melds, handPlaced: dp.placed, handJokers: dp.handJokers, rowsSubset: currentBoard, phase: 4 });
                     if (vr.full && vr.r === 0 && dp.placed === liveHandTotal && liveHandTotal > 0) dpOptimal = true;
+                }
+                // Niveau Maître : coups qui gardent volontairement une tuile, évalués ensuite sur le tour suivant
+                if (AIW.future > 0 && r < 0.5) {
+                    const base = candidateSolutions.find(cs => cs.phase === 4);
+                    if (base) {
+                        const typesUsed = [];
+                        for (const cm of base.cand) for (const k of cm.meld.types) if (cm.fromHand[k] > 0 && k !== TILE_TYPE_JOKER && !typesUsed.includes(k)) typesUsed.push(k);
+                        for (const k of typesUsed.slice(0, 6)) {
+                            if (Date.now() > dpDeadline) break;
+                            const hk = new Uint8Array(handCounts); hk[k]--;
+                            let dk = null;
+                            try { dk = solveByValueDP(hk, tableCounts, dpDeadline, {}); } catch (err) { dk = null; }
+                            if (dk && dk.placed > 0) candidateSolutions.push({ cand: dk.melds, handPlaced: dk.placed, handJokers: dk.handJokers, rowsSubset: currentBoard, phase: 5 });
+                        }
+                    }
                 }
             }
             if (!options.skipBnb && !dpOptimal) {
@@ -6487,10 +6612,27 @@
                 scoredCandidates.push({ cand, handPlaced, handJokers, remainingCount, remainingPoints, flexibility, score, rowsSubset: item.rowsSubset, phase: item.phase });
             }
 
+            // Stratégie sur plusieurs tours (niveau Maître) : pour les meilleurs coups, combien de tuiles restantes
+            // pourront être posées au tour suivant si la table ne change pas ? Bonus si la main pourra être vidée.
+            if (AIW.future > 0 && isOpened && scoredCandidates.length > 1) {
+                const topF = scoredCandidates.slice().sort((a, b) => b.score - a.score).filter(c => c.remainingCount > 0).slice(0, 6);
+                const fDeadline = startTime + 0.8 * budgetMs;
+                for (const c of topF) {
+                    if (Date.now() > fDeadline) break;
+                    const tc = new Uint8Array(tableCounts), rc = new Uint8Array(handCounts);
+                    for (const cm of c.cand) for (const k of cm.meld.types) { tc[k] += cm.fromHand[k]; rc[k] -= cm.fromHand[k]; }
+                    let nx = null;
+                    try { nx = solveByValueDP(rc, tc, fDeadline, { maxStates: 60000 }); } catch (err) { nx = null; }
+                    if (!nx) continue;
+                    c.nextPlaceable = nx.placed;
+                    c.score += AIW.future * (1 - r) * (nx.placed * 50 + (nx.placed >= c.remainingCount ? 300 : 0));
+                }
+            }
+
             // Anticipation Expert : Monte-Carlo par déterminisation (Cowling, Powley & Whitehouse, 2012).
             // Pour les meilleurs coups, on tire au hasard des mains possibles du joueur et on mesure
             // la proportion de cas où il pourrait poser toutes ses tuiles au tour suivant.
-            if (profile === 'expert' && unknownCounts && opponentHandCount > 0 && opponentHandCount <= 6 && scoredCandidates.length > 1 && AIW.mc > 0) {
+            if (profile === 'expert' && unknownCounts && opponentHandCount > 0 && opponentHandCount <= (options.mcMaxOpp || 6) && scoredCandidates.length > 1 && AIW.mc > 0) {
                 const top = scoredCandidates.slice().sort((a, b) => b.score - a.score).filter(c => c.remainingCount > 0).slice(0, 4);
                 const poolArr = [];
                 for (let ty = 0; ty < 53; ty++) for (let q = 0; q < unknownCounts[ty]; q++) poolArr.push(ty);
@@ -6505,13 +6647,23 @@
                     const rnd = () => { seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff; return seed / 0x80000000; };
                     const mcDeadline = startTime + 0.92 * budgetMs;
                     const opp = new Uint8Array(53);
-                    mcLoop: for (let s = 0; s < 10; s++) {
-                        opp.fill(0);
-                        const arr = poolArr.slice();
-                        for (let q = 0; q < opponentHandCount; q++) {
-                            const j2 = q + Math.floor(rnd() * (arr.length - q));
-                            const tmp = arr[q]; arr[q] = arr[j2]; arr[j2] = tmp;
-                            opp[arr[q]]++;
+                    mcLoop: for (let s = 0; s < (options.mcSamples || 10); s++) {
+                        // Inférence (Maître) : si le joueur vient de piocher après son ouverture, il ne pouvait rien poser
+                        // sur cette table. On écarte les mains imaginées qui l'auraient permis (3 essais maximum).
+                        let attempts = 0;
+                        while (true) {
+                            opp.fill(0);
+                            const arr = poolArr.slice();
+                            for (let q = 0; q < opponentHandCount; q++) {
+                                const j2 = q + Math.floor(rnd() * (arr.length - q));
+                                const tmp = arr[q]; arr[q] = arr[j2]; arr[j2] = tmp;
+                                opp[arr[q]]++;
+                            }
+                            attempts++;
+                            if (!(options.oppPassed && options.oppOpened) || attempts >= 3 || Date.now() > mcDeadline) break;
+                            let couldPlay = null;
+                            try { couldPlay = solveByValueDP(opp, tableCounts, mcDeadline, { maxStates: 40000 }); } catch (err) { couldPlay = null; }
+                            if (!couldPlay || couldPlay.placed === 0) break;
                         }
                         for (let ci = 0; ci < top.length; ci++) {
                             if (Date.now() > mcDeadline) break mcLoop;
@@ -7028,18 +7180,15 @@
         updateMatchDisplay();
     }
 
-    function updateTotalRoundsSetting(val, force = false) {
+    function updateTotalRoundsSetting(val, force = false, confirmed = false) {
         const parsed = Math.max(1, Math.min(10, parseInt(val, 10) || 2));
         if (parsed === totalRounds && !force) {
             syncSettingsControls();
             return;
         }
-        if (!force && isMatchInProgress()) {
-            const ok = window.confirm(t('confirm_change_rounds'));
-            if (!ok) {
-                syncSettingsControls();
-                return;
-            }
+        if (!force && confirmed !== true && isMatchInProgress()) {
+            askConfirm(t('confirm_change_rounds'), () => updateTotalRoundsSetting(val, force, true), () => syncSettingsControls());
+            return;
         }
         totalRounds = parsed;
         syncSettingsControls();
@@ -7167,11 +7316,10 @@
         if (suggestBtn) suggestBtn.style.display = hintsEnabled ? 'flex' : 'none';
     }
 
-    function startNewMatch(force = false) {
-        if (!force && gameState !== 'GAME_OVER' && isMatchInProgress()) {
-            if (!window.confirm(t('confirm_new_match'))) {
-                return false;
-            }
+    function startNewMatch(force = false, confirmed = false) {
+        if (!force && confirmed !== true && gameState !== 'GAME_OVER' && isMatchInProgress()) {
+            const res = askConfirm(t('confirm_new_match'), () => startNewMatch(force, true));
+            return res === undefined ? false : res;
         }
         const goOverlay = document.getElementById('game-over-overlay');
         if (goOverlay) goOverlay.style.display = 'none';
@@ -7390,6 +7538,7 @@
 
     function initGame(seed = null, skipDrawAnimation = false) {
         clearAllNotifications();
+        playerPassedLastTurn = false;
         if (isDemoActive) {
             isDemoActive = false;
             window.removeEventListener('keydown', onDemoKeyDown);
@@ -9290,8 +9439,8 @@
 
         // Point 5 : vérification de modification du plateau
         if (getPlacedTilesCount() > 0 || hasBoardBeenModified()) {
-            const ok = window.confirm(t('confirm_restart_for_demo'));
-            if (!ok) return;
+            const ok = isUiTestMode() ? window.confirm(t('confirm_restart_for_demo')) : await appConfirm(t('confirm_restart_for_demo'));
+            if (!ok || gameState !== 'PLAYER_TURN') return;
             resetBoardState();
             resetHintButton();
         }
@@ -9678,26 +9827,14 @@
                         message: t('err_turn_joker_before_opening')
                     });
                 } else {
-                    // Règle officielle : un joker récupéré doit être rejoué dans le même tour pour former une NOUVELLE combinaison.
-                    // On juge sur le contenu (pas sur l'identifiant de la rangée, qui peut être hérité lors d'une manipulation) :
-                    // la rangée d'arrivée ne doit contenir en entier aucune combinaison déjà présente au début du tour.
-                    const destTileIds = new Set(destRow.tiles.map(x => x.id));
-                    const addedToExisting = backupBoard.some(br =>
-                        br.id !== item.fromRowId &&
-                        br.tiles.length > 0 &&
-                        br.tiles.every(x => destTileIds.has(x.id))
-                    );
+                    // Règle d'or : après l'ouverture, un joker de la table est une ressource libre. Le coup est valide si,
+                    // à la fin du tour, toutes les combinaisons sont valides, aucune tuile n'est isolée et au moins une tuile
+                    // du chevalet a été posée (ces trois points sont contrôlés plus haut).
                     if (destRow.tiles.length < RULES.minMeldLength) {
                         errors.push({
                             rowId: destRow.id,
                             code: 'JOKER_ISOLATED',
                             message: t('err_turn_joker_isolated_reuse')
-                        });
-                    } else if (addedToExisting) {
-                        errors.push({
-                            rowId: destRow.id,
-                            code: 'JOKER_INVALID_DESTINATION',
-                            message: t('err_turn_joker_moved_replay')
                         });
                     }
                 }
@@ -9880,7 +10017,16 @@
             btnNewMatch.textContent = t('btn_new_match');
         }
 
-        showOverlayReliably(overlay, matchFinishedNow ? '#go-btn-new-match' : '#go-btn-next-round');
+        // Laisser le temps de voir le dernier coup avant le bilan (surtout quand l'IA gagne)
+        const goFocus = matchFinishedNow ? '#go-btn-new-match' : '#go-btn-next-round';
+        const goDelay = isUiTestMode() ? 0 : (roundResult.winner === 'ai' ? 4000 : (roundResult.winner === 'draw' ? 2500 : 1500));
+        if (goDelay > 0) {
+            const goGen = gameGeneration;
+            notify({ text: t('go_pending'), kind: 'info', channel: 'bubble', ttlMs: goDelay, key: 'go-pending' });
+            setTimeout(() => { if (goGen === gameGeneration) showOverlayReliably(overlay, goFocus); }, goDelay);
+        } else {
+            showOverlayReliably(overlay, goFocus);
+        }
         pushLog(`[FIN DE MANCHE] ${roundResult.reason} ${roundResult.calc}`);
         return true;
     }
@@ -10282,8 +10428,8 @@
         if (placedTiles.length > 0 || boardModified) {
             pauseTurnTimer();
             const confirmMsg = (pool.length > 0) ? t('confirm_cancel_to_draw') : t('confirm_cancel_to_pass');
-            const confirmCancel = window.confirm(confirmMsg);
-            if (!confirmCancel) {
+            const confirmCancel = isUiTestMode() ? window.confirm(confirmMsg) : await appConfirm(confirmMsg);
+            if (!confirmCancel || gameState !== 'PLAYER_TURN') {
                 resumeTurnTimer();
                 return;
             }
@@ -10300,6 +10446,7 @@
         aiLastTurnPlacedTileIds.clear();
         aiLastTurnRowIds.clear();
 
+        playerPassedLastTurn = true;
         const drawResult = drawForPlayer({ pool, playerHand, sortMode, consecutivePassCount, newlyDrawnTileIds });
         pool = drawResult.pool;
         playerHand = drawResult.playerHand;
@@ -10423,6 +10570,7 @@
         });
 
         stopTurnTimer();
+        playerPassedLastTurn = false;
         resetHintButton();
         lastValidationErrors = [];
         clearInvalidMeldErrors();
@@ -10540,18 +10688,16 @@
             for (let v = 1; v <= 13; v++) unknownCounts[cIdx * 13 + (v - 1)] = aiKnowledge[c][v].unknown;
         });
         unknownCounts[52] = aiKnowledge.jokers.unknown;
-        const solveRes = await requestWorkerSolve(aiHand, boardRows, aiOpened, {
-            profile: aiCfg.profile,
-            aiStyle: aiCfg.aiStyle,
+        const solveRes = await requestWorkerSolve(aiHand, boardRows, aiOpened, buildAiSolveOptions(aiProfile, {
             budgetMs: getAiBudget(aiProfile, tableTileCount, playerHand.length),
             opponentHandCount: playerHand.length,
             poolCount: pool.length,
             unknownCounts,
-            weights: loadAiWeights(),
+            oppPassed: playerPassedLastTurn,
+            oppOpened: playerOpened,
             holdBackCount: aiConsecutiveHoldCount,
-            consecutiveMissCount: aiConsecutiveMissCount,
-            randomMiss: aiCfg.profile === 'facile' ? Math.random() : undefined
-        });
+            consecutiveMissCount: aiConsecutiveMissCount
+        }));
 
         if (aiTurnGen !== gameGeneration) return;
 
@@ -11158,15 +11304,11 @@
         // Cas officiel doublon dans une suite : proposer la scission
         const dupSplit = checkDuplicateRunSplit(cleanTile, targetRow);
         if (dupSplit) {
-            const userConfirmed = (typeof window !== 'undefined' && window.confirm) ? window.confirm(dupSplit.prompt) : true;
-            if (userConfirmed) {
-                executeSplitAndInsert(cleanTile, targetRowId, dupSplit.splitIdx, sourceZone, sourceRowId, sourceIndex, splitContext);
-                return;
-            } else {
-                putTileBackAtSource(cleanTile, sourceZone, sourceRowId, sourceIndex);
-                updateUI();
-                return;
-            }
+            askConfirm(dupSplit.prompt,
+                () => { executeSplitAndInsert(cleanTile, targetRowId, dupSplit.splitIdx, sourceZone, sourceRowId, sourceIndex, splitContext); },
+                () => { putTileBackAtSource(cleanTile, sourceZone, sourceRowId, sourceIndex); updateUI(); },
+                { yes: t('dlg_split') });
+            return;
         }
 
         const oldJokerVals = new Map();
@@ -12974,7 +13116,7 @@
 
 
     function renderDashboardSparklineSvg(history) {
-        const W = 280, H = 32, padL = 6, padR = 6, padT = 4, padB = 4;
+        const W = 280, H = 84, padL = 18, padR = 6, padT = 6, padB = 6;
         const plotW = W - padL - padR, plotH = H - padT - padB;
         const hist = (history && history.length > 0) ? history : [{ turn: 0, playerHandCount: playerHand.length, aiHandCount: aiHand.length }];
         const maxTurn = Math.max(1, ...hist.map(h => h.turn || 0));
@@ -12985,7 +13127,12 @@
         const pPoints = hist.map(h => `${getX(h.turn).toFixed(1)},${getY(h.playerHandCount).toFixed(1)}`).join(' ');
         const aiPoints = hist.map(h => `${getX(h.turn).toFixed(1)},${getY(h.aiHandCount).toFixed(1)}`).join(' ');
 
-        let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%; height:32px; display:block;" xmlns="http://www.w3.org/2000/svg">`;
+        let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%; height:84px; display:block;" xmlns="http://www.w3.org/2000/svg">`;
+        [0, Math.round(maxHand / 2), maxHand].forEach(gv => {
+            const gy = getY(gv).toFixed(1);
+            svg += `<line x1="${padL}" y1="${gy}" x2="${W - padR}" y2="${gy}" stroke="rgba(255,255,255,0.12)" stroke-width="1" stroke-dasharray="3 3" />`;
+            svg += `<text x="${padL - 4}" y="${(parseFloat(gy) + 3).toFixed(1)}" font-size="8" text-anchor="end" fill="rgba(255,255,255,0.55)">${gv}</text>`;
+        });
         svg += `<polyline points="${pPoints}" fill="none" stroke="var(--player-color)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />`;
         svg += `<polyline points="${aiPoints}" fill="none" stroke="var(--ai-color)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />`;
         hist.forEach(h => {
@@ -13018,6 +13165,7 @@
                             <span class="opening-chip chip-ai"></span>
                         </div>
                         <div class="dash-sparkline-wrap"></div>
+                        <div class="dash-hints"><div class="dash-hint-1"></div><div class="dash-hint-2"></div></div>
                         <div class="partie-footer-line" style="display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; margin-top:2px;">
                             <span class="partie-pioche-text"><span data-i18n="count_deck">Pioche</span> <strong class="val-deck-count">76</strong> · <span class="val-deck-estimate"></span></span>
                             <span class="partie-points-text"><span data-i18n="dash_your_points">Vos points</span> <strong class="val-hand-penalty" style="color:var(--danger-text);">0</strong></span>
@@ -13121,6 +13269,37 @@
         if (valDeckEstimate) valDeckEstimate.textContent = `≈ ${turnsEstimate} ${t('dash_turns')}`;
         if (barDeck) barDeck.style.width = `${Math.min(100, Math.round((deckCount / 78) * 100))}%`;
         if (valHandPenalty) valHandPenalty.textContent = handPenalty;
+        // Repères concrets pour le joueur
+        const hint1 = root.querySelector('.dash-hint-1'), hint2 = root.querySelector('.dash-hint-2');
+        if (hint1) {
+            if (!playerOpened) {
+                let best = 0;
+                try { best = computeBestOpeningScore(playerHand) || 0; } catch (e) { best = 0; }
+                hint1.title = '';
+                hint1.innerHTML = t('dash_opening_hand') + ' : <strong style="color:' + (best >= 30 ? '#10b981' : 'var(--text)') + ';">' + best + '</strong> / 30';
+            } else {
+                const norm = playerHand.filter(tl => !tl.isJoker);
+                const iso = norm.filter(tl => !norm.some(o => o !== tl && (
+                    (o.value === tl.value && o.color !== tl.color) ||
+                    (o.color === tl.color && o.value !== tl.value && Math.abs(o.value - tl.value) <= 2))));
+                const isoPts = iso.reduce((s, tl) => s + tl.value, 0);
+                hint1.title = t('dash_isolated_hint');
+                hint1.innerHTML = t('dash_isolated') + ' : <strong>' + iso.length + '</strong>' + (iso.length ? ' (' + isoPts + ' pts)' : '');
+            }
+        }
+        if (hint2) {
+            const hist = roundStats.turnsHistory || [];
+            if (hist.length >= 7) {
+                const now = hist[hist.length - 1], past = hist[hist.length - 7];
+                const dP = now.playerHandCount - past.playerHandCount, dA = now.aiHandCount - past.aiHandCount;
+                const fmt = x => (x > 0 ? '+' : '') + x;
+                hint2.title = t('dash_pace_hint');
+                hint2.innerHTML = t('dash_pace') + ' : ' + t('name_you') + ' <strong>' + fmt(dP) + '</strong> · ' + t('name_ai') + ' <strong>' + fmt(dA) + '</strong>';
+            } else {
+                hint2.innerHTML = '';
+            }
+        }
+
 
         // Heatmap
         const knowledge = getTileKnowledge(playerHand, boardRows);
@@ -13194,7 +13373,7 @@
         aiProfile = val;
         try { localStorage.setItem('rummikub_ai_profile', aiProfile); } catch(e){}
         syncSettingsControls();
-        const name = val === 'facile' ? t('opt_easy') : val === 'normal' ? t('opt_normal') : t('opt_expert');
+        const name = aiLevelLabel(val);
         notify({ text: `${t('opt_level')} : ${name}`, kind: 'info', channel: 'bubble', ttlMs: 2000, key: 'level' });
     }
     function onSettingsTimerChange(checked) {
@@ -20309,6 +20488,130 @@
         }
     }
 
+    // ===== TOURNOI IA CONTRE IA (?bench=match&a=expert&b=maitre&n=20&scale=0.4) =====
+    // Chaque donne est jouée deux fois en inversant les places (parties miroir), pour limiter l'effet du hasard.
+    let simVariant = null; // variante testée par le tournoi (paramètre bw)
+    async function simulateAiGame(lv0, lv1, seed, scale) {
+        const rng = createMulberry32(seed);
+        const pool = shuffleArray(generateStandard106TileSet(), rng);
+        const hands = [pool.splice(0, 14), pool.splice(0, 14)];
+        let board = [];
+        const opened = [false, false], passedLast = [false, false], holdCount = [0, 0], missCount = [0, 0];
+        let cur = 0, passes = 0, turn = 0;
+        while (turn < 300) {
+            turn++;
+            const lv = cur === 0 ? lv0 : lv1;
+            const hand = hands[cur], opp = hands[1 - cur];
+            const tableTileCount = board.reduce((s, rw) => s + rw.tiles.length, 0);
+            const kn = getTileKnowledge(hand, board);
+            const unknownCounts = new Uint8Array(53);
+            COLORS.forEach((c, cIdx) => { for (let v = 1; v <= 13; v++) unknownCounts[cIdx * 13 + (v - 1)] = kn[c][v].unknown; });
+            unknownCounts[52] = kn.jokers.unknown;
+            const opts = buildAiSolveOptions(lv, {
+                budgetMs: Math.max(250, Math.round(getAiBudget(lv, tableTileCount, opp.length) * scale)),
+                opponentHandCount: opp.length, poolCount: pool.length, unknownCounts,
+                oppPassed: passedLast[1 - cur], oppOpened: opened[1 - cur],
+                holdBackCount: holdCount[cur], consecutiveMissCount: missCount[cur], rng
+            });
+            if (simVariant && simVariant.seat === cur) opts.weights = Object.assign({}, opts.weights, simVariant.weights);
+            let res = null;
+            try { res = await requestWorkerSolve(hand, board, opened[cur], opts); } catch (e) { res = null; }
+            let played = false;
+            if (res && res.steps && res.steps.length) {
+                try {
+                    const steps = remapNewRowIds(res.steps, board);
+                    const st = applySteps({ playerHand: [], aiHand: hand, boardRows: board }, steps);
+                    st.boardRows.forEach(normalizeRow);
+                    const v = validateTurn(board, st.boardRows, hand, st.aiHand, opened[cur]);
+                    if (v.valid && !st.boardRows.some(rw => rw.tiles.length < RULES.minMeldLength) && st.aiHand.length < hand.length) {
+                        board = st.boardRows; hands[cur] = st.aiHand; opened[cur] = true; played = true;
+                    }
+                } catch (e) { played = false; }
+            }
+            holdCount[cur] = (res && res.reason === 'hold_back') ? holdCount[cur] + 1 : 0;
+            missCount[cur] = (res && res.reason === 'random_miss') ? missCount[cur] + 1 : 0;
+            if (played) {
+                passes = 0; passedLast[cur] = false;
+                if (hands[cur].length === 0) {
+                    const pts = calculateHandScore(hands[1 - cur]);
+                    return { winner: cur, diff0: cur === 0 ? pts : -pts, turns: turn };
+                }
+            } else {
+                passedLast[cur] = true;
+                if (pool.length > 0) { hands[cur] = hands[cur].concat([pool.pop()]); passes = 0; }
+                else { passes++; if (passes >= 2) break; }
+            }
+            cur = 1 - cur;
+        }
+        const p0 = calculateHandScore(hands[0]), p1 = calculateHandScore(hands[1]);
+        if (p0 === p1) return { winner: -1, diff0: 0, turns: turn };
+        const w = p0 < p1 ? 0 : 1, d = Math.abs(p0 - p1);
+        return { winner: w, diff0: w === 0 ? d : -d, turns: turn };
+    }
+
+    async function runAiTournament() {
+        stopTurnTimer();
+        gameState = 'BENCH';
+        const params = new URLSearchParams(window.location.search);
+        const lvA = AI_LEVELS.includes(params.get('a')) ? params.get('a') : 'expert';
+        const lvB = AI_LEVELS.includes(params.get('b')) ? params.get('b') : 'maitre';
+        const nDeals = Math.max(1, Math.min(100, parseInt(params.get('n') || '20', 10) || 20));
+        const scale = Math.max(0.1, Math.min(1, parseFloat(params.get('scale') || '0.4') || 0.4));
+        // bw : pondérations de test pour le joueur B, ex. bw=future:1,risk:6
+        let bWeights = null;
+        if (params.get('bw')) {
+            bWeights = {};
+            params.get('bw').split(',').forEach(kv => { const [k, v] = kv.split(':'); if (k && !isNaN(parseFloat(v))) bWeights[k.trim()] = parseFloat(v); });
+        }
+        const overlay = document.getElementById('test-report-overlay');
+        const container = document.getElementById('test-results-container');
+        if (overlay) {
+            const h2 = overlay.querySelector('h2');
+            if (h2) h2.textContent = 'Tournoi IA : ' + aiLevelLabel(lvA) + ' contre ' + aiLevelLabel(lvB);
+            overlay.style.display = 'flex';
+        }
+        const st = { A: 0, B: 0, draws: 0, ptsB: 0, turns: 0, games: 0 };
+        const t0 = performance.now();
+        for (let d = 0; d < nDeals; d++) {
+            for (const swap of [false, true]) {
+                if (container) container.innerHTML = '<div style="padding:15px; color:var(--accent-gold); font-weight:700;"><i class="fa-solid fa-spinner fa-spin"></i> Partie ' + (st.games + 1) + ' / ' + (nDeals * 2) + ' — ' + aiLevelLabel(lvA) + ' ' + st.A + ' · ' + aiLevelLabel(lvB) + ' ' + st.B + ' · nuls ' + st.draws + '</div>';
+                simVariant = bWeights ? { seat: swap ? 0 : 1, weights: bWeights } : null;
+                const g = await simulateAiGame(swap ? lvB : lvA, swap ? lvA : lvB, 5000 + d, scale);
+                simVariant = null;
+                st.games++; st.turns += g.turns;
+                if (g.winner === -1) st.draws++;
+                else if ((g.winner === 0) === swap) st.B++; else st.A++;
+                st.ptsB += swap ? g.diff0 : -g.diff0;
+            }
+        }
+        const decided = st.A + st.B;
+        const p = decided ? st.B / decided : 0.5;
+        const se = decided ? Math.sqrt(p * (1 - p) / decided) : 0;
+        const lo = Math.max(0, p - 1.96 * se), hi = Math.min(1, p + 1.96 * se);
+        let verdict;
+        if (decided < 20) verdict = 'Trop peu de parties pour conclure : augmentez n.';
+        else if (lo > 0.5) verdict = aiLevelLabel(lvB) + ' est nettement plus fort que ' + aiLevelLabel(lvA) + '.';
+        else if (hi < 0.5) verdict = aiLevelLabel(lvA) + ' est nettement plus fort que ' + aiLevelLabel(lvB) + '.';
+        else verdict = 'Différence non significative : les deux niveaux sont proches.';
+        const avgPtsB = st.ptsB / st.games, avgTurns = st.turns / st.games, minutes = (performance.now() - t0) / 60000;
+        try { localStorage.setItem('rummikub_ai_match_last', JSON.stringify({ a: lvA, b: lvB, games: st.games, winsA: st.A, winsB: st.B, draws: st.draws, rateB: p, lo, hi, avgPtsB, avgTurns, minutes })); } catch (e) {}
+        const row = (k, v) => '<tr><td>' + k + '</td><td>' + v + '</td></tr>';
+        if (container) {
+            container.innerHTML = '<table class="match-history-table" style="font-size:0.8rem;"><tbody>'
+                + row('Parties jouées', st.games + ' (' + nDeals + ' donnes × 2, places inversées)')
+                + row('Victoires ' + aiLevelLabel(lvA), st.A)
+                + row('Victoires ' + aiLevelLabel(lvB), st.B)
+                + row('Nuls', st.draws)
+                + row('Taux de victoire ' + aiLevelLabel(lvB), '<strong>' + (p * 100).toFixed(1) + ' %</strong> (intervalle 95 % : ' + (lo * 100).toFixed(0) + '–' + (hi * 100).toFixed(0) + ' %)')
+                + row('Écart moyen de points (' + aiLevelLabel(lvB) + ')', (avgPtsB >= 0 ? '+' : '') + avgPtsB.toFixed(1))
+                + row('Tours par partie', avgTurns.toFixed(1))
+                + row('Durée', minutes.toFixed(1) + ' min')
+                + '</tbody></table>'
+                + '<p style="font-size:0.85rem; margin-top:10px; font-weight:700; color:var(--accent-gold);">' + verdict + '</p>'
+                + '<p style="font-size:0.75rem; color:var(--text-muted);">Paramètres : a et b = debutant, facile, normal, expert, maitre ; n = nombre de donnes ; scale = part du temps de réflexion normal (0,4 par défaut).</p>';
+        }
+    }
+
     async function runAiBenchmark() {
         stopTurnTimer();
         gameState = 'BENCH';
@@ -20532,6 +20835,8 @@
                 const overlay = document.getElementById('test-report-overlay');
                 if (overlay) overlay.style.display = 'flex';
             });
+        } else if (window.location.search.includes('bench=match')) {
+            runAiTournament();
         } else if (window.location.search.includes('bench=tune')) {
             runAiWeightTuning();
         } else if (window.location.search.includes('bench=ai')) {
@@ -20572,7 +20877,7 @@
       ok.style.cssText = 'min-height:34px;height:34px;font-size:0.8rem;padding:0 10px;';
       ok.textContent = t('update_now');
       ok.onclick = () => {
-        if (!canUpdateNow() && !confirm(t('update_confirm_restart'))) return;
+        if (!canUpdateNow()) { askConfirm(t('update_confirm_restart'), () => activate(w)); return; }
         activate(w);
       };
       const later = document.createElement('button');
