@@ -4272,7 +4272,7 @@
     document.documentElement.lang = currentLang;
     document.addEventListener('DOMContentLoaded', updateDomTranslations);
 
-    const APP_VERSION = '2026.11.12-3'; // ← à changer à chaque mise en ligne
+    const APP_VERSION = '2026.11.12-4'; // ← à changer à chaque mise en ligne
     // Coefficients de l'IA (réglés avec index.html?bench=tune, puis recopiés ici)
     const AI_DEFAULT_WEIGHTS = { risk: 4, dead: 2, flex: 5, mc: 1 };
     let playerPassedLastTurn = false; // le joueur a pioché au tour précédent (utilisé par le niveau Maître)
@@ -5116,6 +5116,7 @@
         if (overlay) overlay.style.display = 'flex';
     }
     function continueSavedMatch() {
+        newMatchAlreadyConfirmed = false;
         const checkedAi = document.querySelector('input[name="welcome-ai"]:checked');
         const level = checkedAi ? checkedAi.value : aiProfile;
         const checkedLayout = document.querySelector('input[name="welcome-layout"]:checked');
@@ -5138,6 +5139,7 @@
         }
     }
     function closeSettingsModal() {
+        newMatchAlreadyConfirmed = false;
         if (gameState === 'SETUP') {
             if (canRestoreActiveGame()) {
                 continueSavedMatch();
@@ -5154,6 +5156,7 @@
     }
     function applyWelcomeSettingsAndStart(confirmed = false) {
         const isGameInProgress = gameState !== 'SETUP' && isMatchInProgress();
+        if (newMatchAlreadyConfirmed) { confirmed = true; newMatchAlreadyConfirmed = false; }
         if (isGameInProgress && confirmed !== true) {
             askConfirm(t('confirm_new_match_settings'), () => applyWelcomeSettingsAndStart(true), () => {
                 syncSettingsControls();
@@ -7196,6 +7199,7 @@
 
     const ACTIVE_GAME_STORAGE_KEY = 'rummikub_active_game_v1';
     let aiTurnSnapshot = null; // sauvegarde cohérente prise au début du tour de l'IA
+    let newMatchAlreadyConfirmed = false; // évite une 2e confirmation dans la fenêtre Nouvelle partie
 
     // Retire de la table les rangées invalides (sauvegarde prise en plein milieu d'une animation)
     // et rend leurs tuiles au chevalet indiqué. Le nombre total de tuiles est conservé.
@@ -7517,6 +7521,7 @@
             initGame(null, false);
             return true;
         }
+        newMatchAlreadyConfirmed = true;
         openSettingsModal();
         return true;
     }
