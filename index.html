@@ -3584,6 +3584,7 @@
             btn_sort_color: "Trier par couleur", btn_sort_num: "Trier par chiffre", btn_hint: "Indice", btn_show_demo: "Montre-moi la démo",
             btn_last_ai_move: "Dernier coup", btn_last_ai_move_hint: "Revoir le dernier coup joué par l'IA", ticker_ready: "Prêt.",
             opt_language: "Langue", btn_replay: "Revoir", btn_replay_hint: "Revoir le coup",
+            log_game_resumed: "Partie reprise.",
             meld_inprogress: "En cours", meld_incomplete_tag: "Incomplet : {n}/3",
             btn_merge_group_title: "Regrouper → {preview}", btn_merge_group_aria: "Fusionner : {preview}",
             aria_choose_joker_val: "Choisir la valeur {v} pour le comodín",
@@ -3784,6 +3785,7 @@
             btn_sort_color: "Sort by color", btn_sort_num: "Sort by number", btn_hint: "Hint", btn_show_demo: "Show demonstration",
             btn_last_ai_move: "Last Move", btn_last_ai_move_hint: "Replay AI's last move", ticker_ready: "Ready.",
             opt_language: "Language", btn_replay: "Replay", btn_replay_hint: "Replay move",
+            log_game_resumed: "Game resumed.",
             meld_inprogress: "In progress", meld_incomplete_tag: "Incomplete: {n}/3",
             btn_merge_group_title: "Merge → {preview}", btn_merge_group_aria: "Merge: {preview}",
             aria_choose_joker_val: "Choose value {v} for the Joker",
@@ -3984,6 +3986,7 @@
             btn_sort_color: "Ordenar por color", btn_sort_num: "Ordenar por número", btn_hint: "Pista", btn_show_demo: "Mostrar demostración",
             btn_last_ai_move: "Último movimiento", btn_last_ai_move_hint: "Ver de nuevo la última jugada de la IA", ticker_ready: "Listo.",
             opt_language: "Idioma", btn_replay: "Repetir", btn_replay_hint: "Ver jugada de nuevo",
+            log_game_resumed: "Partida reanudada.",
             meld_inprogress: "En curso", meld_incomplete_tag: "Incompleta: {n}/3",
             btn_merge_group_title: "Reunir → {preview}", btn_merge_group_aria: "Fusionar: {preview}",
             aria_choose_joker_val: "Elegir el valor {v} para el comodín",
@@ -4269,7 +4272,7 @@
     document.documentElement.lang = currentLang;
     document.addEventListener('DOMContentLoaded', updateDomTranslations);
 
-    const APP_VERSION = '2026.11.12-1'; // ← à changer à chaque mise en ligne
+    const APP_VERSION = '2026.11.12-2'; // ← à changer à chaque mise en ligne
     // Coefficients de l'IA (réglés avec index.html?bench=tune, puis recopiés ici)
     const AI_DEFAULT_WEIGHTS = { risk: 4, dead: 2, flex: 5, mc: 1 };
     let playerPassedLastTurn = false; // le joueur a pioché au tour précédent (utilisé par le niveau Maître)
@@ -5102,7 +5105,7 @@
         syncSettingsControls();
         const continueBtn = document.getElementById('welcome-continue-btn');
         if (continueBtn) {
-            if (gameState === 'SETUP' && matchHistory.length > 0) {
+            if (canRestoreActiveGame() || (gameState === 'SETUP' && matchHistory.length > 0)) {
                 continueBtn.textContent = t('btn_continue_round_n', { current: currentRound, total: totalRounds });
                 continueBtn.style.display = 'flex';
             } else {
@@ -5128,11 +5131,17 @@
         toggleTimerSetting(timer);
         setHintsSetting(hints);
         document.getElementById('welcome-settings-overlay').style.display = 'none';
-        initGame();
+        if (canRestoreActiveGame()) {
+            restoreActiveGame();
+        } else {
+            initGame();
+        }
     }
     function closeSettingsModal() {
         if (gameState === 'SETUP') {
-            if (matchHistory.length > 0) {
+            if (canRestoreActiveGame()) {
+                continueSavedMatch();
+            } else if (matchHistory.length > 0) {
                 continueSavedMatch();
             } else {
                 applyWelcomeSettingsAndStart();
@@ -5170,6 +5179,7 @@
         setBoardLayoutMode(layout);
         toggleTimerSetting(timer);
         setHintsSetting(hints);
+        clearActiveGameState();
         document.getElementById('welcome-settings-overlay').style.display = 'none';
         updateTotalRoundsSetting(rounds, true);
     }
@@ -7184,6 +7194,162 @@
         updateMatchDisplay();
     }
 
+    const ACTIVE_GAME_STORAGE_KEY = 'rummikub_active_game_v1';
+
+    function saveActiveGameState() {
+        if (gameState === 'TEST' || gameState === 'BENCH' || gameState === 'SETUP') return;
+        if (playerHand.length === 0 && aiHand.length === 0) return;
+        try {
+            if (matchFinished) {
+                clearActiveGameState();
+                return;
+            }
+            const data = {
+                version: 1,
+                timestamp: Date.now(),
+                gameState: gameState === 'ANIMATING' ? 'AI_TURN' : gameState,
+                currentRound,
+                totalRounds,
+                matchHistory,
+                matchFinished,
+                playerOpened,
+                aiOpened,
+                consecutivePassCount,
+                aiConsecutiveHoldCount,
+                aiConsecutiveMissCount,
+                playerPassedLastTurn,
+                sortMode,
+                turnSecondsRemaining,
+                tileIdCounter,
+                meldIdCounter,
+                pool,
+                playerHand,
+                backupPlayerHand,
+                aiHand,
+                boardRows,
+                backupBoardRows,
+                roundStats,
+                logEntries: (logEntries || []).slice(-60),
+                fullLogsHistory: (fullLogsHistory || []).slice(-60),
+                aiLastTurnRowIds: Array.from(aiLastTurnRowIds || []),
+                aiLastTurnPlacedTileIds: Array.from(aiLastTurnPlacedTileIds || []),
+                newlyDrawnTileIds: Array.from(newlyDrawnTileIds || [])
+            };
+            localStorage.setItem(ACTIVE_GAME_STORAGE_KEY, JSON.stringify(data));
+        } catch (e) {
+            console.warn('[Storage] Impossible de sauvegarder la partie active :', e);
+        }
+    }
+
+    function clearActiveGameState() {
+        try {
+            localStorage.removeItem(ACTIVE_GAME_STORAGE_KEY);
+        } catch (e) {}
+    }
+
+    function canRestoreActiveGame() {
+        try {
+            const raw = localStorage.getItem(ACTIVE_GAME_STORAGE_KEY);
+            if (!raw) return false;
+            const data = JSON.parse(raw);
+            if (!data || !Array.isArray(data.playerHand) || !Array.isArray(data.aiHand) || !Array.isArray(data.boardRows)) return false;
+            if (data.playerHand.length === 0 && data.aiHand.length === 0) return false;
+            const totalTiles = (data.pool?.length || 0) + data.playerHand.length + data.aiHand.length +
+                (data.boardRows.reduce((s, r) => s + (r.tiles?.length || 0), 0));
+            return totalTiles === RULES.totalTiles && !data.matchFinished;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function restoreActiveGame() {
+        try {
+            const raw = localStorage.getItem(ACTIVE_GAME_STORAGE_KEY);
+            if (!raw) return false;
+            const data = JSON.parse(raw);
+            if (!data) return false;
+
+            pool = (data.pool || []).map(cloneTile);
+            playerHand = (data.playerHand || []).map(cloneTile);
+            backupPlayerHand = (data.backupPlayerHand || []).map(cloneTile);
+            aiHand = (data.aiHand || []).map(cloneTile);
+            boardRows = cloneRows(data.boardRows || []);
+            backupBoardRows = cloneRows(data.backupBoardRows || []);
+
+            playerOpened = !!data.playerOpened;
+            aiOpened = !!data.aiOpened;
+            currentRound = data.currentRound || 1;
+            totalRounds = data.totalRounds || 2;
+            matchHistory = Array.isArray(data.matchHistory) ? data.matchHistory : [];
+            matchFinished = !!data.matchFinished;
+            matchWasInProgress = false;
+            consecutivePassCount = data.consecutivePassCount || 0;
+            aiConsecutiveHoldCount = data.aiConsecutiveHoldCount || 0;
+            aiConsecutiveMissCount = data.aiConsecutiveMissCount || 0;
+            playerPassedLastTurn = !!data.playerPassedLastTurn;
+            sortMode = data.sortMode || 'color';
+            turnSecondsRemaining = typeof data.turnSecondsRemaining === 'number' ? data.turnSecondsRemaining : 60;
+            tileIdCounter = data.tileIdCounter || 106;
+            meldIdCounter = data.meldIdCounter || 1000;
+
+            if (data.roundStats) roundStats = data.roundStats;
+            if (Array.isArray(data.logEntries)) logEntries = data.logEntries;
+            if (Array.isArray(data.fullLogsHistory)) fullLogsHistory = data.fullLogsHistory;
+
+            aiLastTurnRowIds = new Set(data.aiLastTurnRowIds || []);
+            aiLastTurnPlacedTileIds = new Set(data.aiLastTurnPlacedTileIds || []);
+            newlyDrawnTileIds = new Set(data.newlyDrawnTileIds || []);
+
+            boardRows.forEach(normalizeRow);
+            syncMeldIdCounter(boardRows);
+
+            gameState = data.gameState || 'PLAYER_TURN';
+            if (gameState === 'ANIMATING') gameState = 'AI_TURN';
+
+            const welcomeOverlay = document.getElementById('welcome-settings-overlay');
+            if (welcomeOverlay) welcomeOverlay.style.display = 'none';
+
+            updateSortButtonUI();
+            updateMatchDisplay();
+            updateUI();
+            updateTopNavbar();
+            assertTileConservation("restoreActiveGame");
+
+            if (gameState === 'PLAYER_TURN') {
+                if (timerEnabled) {
+                    startTurnTimer(false);
+                }
+                startPlayerTurnTiming();
+            } else if (gameState === 'AI_TURN') {
+                const turnGen = ++gameGeneration;
+                setTimeout(() => { if (turnGen === gameGeneration) aiTurn(); }, 400);
+            } else if (gameState === 'GAME_OVER') {
+                checkGameOver();
+            }
+
+            notify({ text: t('log_game_resumed'), kind: 'info', channel: 'bubble', ttlMs: 2500, key: 'game-resumed' });
+            return true;
+        } catch (e) {
+            console.error('[Storage] Échec de la restauration de la partie active :', e);
+            clearActiveGameState();
+            return false;
+        }
+    }
+
+        try {
+            matchFinished = isFinished;
+            const data = {
+                totalRounds,
+                currentRound,
+                matchHistory,
+                matchFinished: isFinished,
+                roundInProgress: inProgress
+            };
+            localStorage.setItem('rummikub_match_state_v2', JSON.stringify(data));
+        } catch(e) {}
+        updateMatchDisplay();
+    }
+
     function updateTotalRoundsSetting(val, force = false, confirmed = false) {
         const parsed = Math.max(1, Math.min(10, parseInt(val, 10) || 2));
         if (parsed === totalRounds && !force) {
@@ -7325,6 +7491,7 @@
             const res = askConfirm(t('confirm_new_match'), () => startNewMatch(force, true));
             return res === undefined ? false : res;
         }
+        clearActiveGameState();
         const goOverlay = document.getElementById('game-over-overlay');
         if (goOverlay) goOverlay.style.display = 'none';
         if (force) {
@@ -7602,6 +7769,7 @@
             saveBackup(); updateUI();
             saveMatchSettings(false, false);
             assertTileConservation("initGame - sans animation");
+            saveActiveGameState();
             gameState = 'PLAYER_TURN';
             pushLog(`[TOUR] ${t('msg_your_turn')}`);
             turnSecondsRemaining = 60;
@@ -7786,6 +7954,7 @@
                     updateUI();
                     saveBackup();
                     assertTileConservation("simulateStarterDraw - distribution");
+                    saveActiveGameState();
                     slotP.innerHTML = '';
                     slotAi.innerHTML = '';
                     onComplete(winner);
@@ -7847,6 +8016,7 @@
         resetHintButton();
         updateLiveValidation();
         assertTileConservation("resetBoardState");
+        saveActiveGameState();
         updateUI();
         pushLog(`[TOUR] ` + t('msg_undo_done'));
     }
@@ -9972,6 +10142,7 @@
             aiHandRemaining: aiHand.length
         });
         saveMatchSettings(matchFinishedNow, false);
+        saveActiveGameState();
 
         const bilanBlock = document.getElementById('go-stats-bilan');
         if (bilanBlock) {
@@ -10356,6 +10527,7 @@
             aiLastTurnPlacedTileIds.clear();
             saveBackup();
             updateUI();
+            saveActiveGameState();
             if (checkGameOver()) return;
             gameState = 'AI_TURN';
             updateUI();
@@ -10382,6 +10554,7 @@
             aiLastTurnPlacedTileIds.clear();
             saveBackup();
             updateUI();
+            saveActiveGameState();
             if (checkGameOver()) return;
             gameState = 'AI_TURN';
             updateUI();
@@ -10390,6 +10563,7 @@
         } else if (result.outcome === 'autoValidate') {
             notify({ text: t('timeout_auto_validated'), kind: 'warning', channel: 'both', logTag: '[TEMPS ÉCOULÉ]', key: 'timer' });
             validatePlayerTurn(true);
+            saveActiveGameState();
         }
     }
 
@@ -10484,6 +10658,7 @@
         saveBackup();
         saveMatchSettings(false, true);
         assertTileConservation("handleDrawOrPass");
+        saveActiveGameState();
 
         setTimeout(async () => {
             try {
@@ -10600,6 +10775,7 @@
         newlyDrawnTileIds.clear();
         saveBackup();
         saveMatchSettings(false, true);
+        saveActiveGameState();
         try {
             updateUI();
         } catch (e) {
@@ -10857,6 +11033,7 @@
         if (aiTurnGen !== gameGeneration) return;
         sortAiHand(); saveBackup(); syncMeldIdCounter(boardRows); updateUI();
         assertTileConservation("aiTurn - Fin de tour IA");
+        saveActiveGameState();
         
         if (checkGameOver()) {
             gameState = 'GAME_OVER';
@@ -11228,6 +11405,7 @@
         clearTapSelection();
         clearNewlyDrawnHighlight();
         assertTileConservation("executeMoveToNewRow");
+        saveActiveGameState();
         updateUI();
         highlightAndScrollToRow(newRowId);
     }
@@ -11385,6 +11563,7 @@
         clearTapSelection();
         clearNewlyDrawnHighlight();
         assertTileConservation("executeMoveToRow");
+        saveActiveGameState();
         updateUI();
         highlightAndScrollToRow(targetRowId);
     }
@@ -11440,6 +11619,7 @@
         clearTapSelection();
         clearNewlyDrawnHighlight();
         assertTileConservation("executeSplitAndInsert");
+        saveActiveGameState();
         updateUI();
         highlightAndScrollToRow(newRowId);
     }
@@ -11474,6 +11654,7 @@
         clearTapSelection();
         clearNewlyDrawnHighlight();
         assertTileConservation("executeMoveToRack");
+        saveActiveGameState();
         updateUI();
     }
 
@@ -12725,6 +12906,7 @@
         normalizeRow(target);
         boardRows = boardRows.filter(r => r.tiles.length > 0);
         clearTapSelection(); updateUI();
+        saveActiveGameState();
         if (!silent) notify({ text: `${t('msg_merged')} ${group.previewText}`, kind: 'success', channel: 'bubble', ttlMs: 2000, key: 'merge' });
     }
     function findMergeableRowGroups() {
@@ -20426,6 +20608,34 @@
             return "0 erreur [ASSERT FAILED] détectée pendant l'ensemble des tests";
         });
 
+        window.addEventListener('pagehide', () => {
+            if (pointerState.active || pointerState.isDragging) {
+                cancelPointerDrag();
+            }
+            saveActiveGameState();
+        });
+
+        window.addEventListener('beforeunload', () => {
+            if (pointerState.active || pointerState.isDragging) {
+                cancelPointerDrag();
+            }
+            saveActiveGameState();
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+                if (pointerState.active || pointerState.isDragging) {
+                    cancelPointerDrag();
+                }
+                pauseTurnTimer();
+                saveActiveGameState();
+            } else if (document.visibilityState === 'visible') {
+                if (gameState === 'PLAYER_TURN') {
+                    resumeTurnTimer();
+                }
+            }
+        });
+
         displayTestReport(testResults);
         return testResults;
     }
@@ -20845,6 +21055,8 @@
             runAiWeightTuning();
         } else if (window.location.search.includes('bench=ai')) {
             runAiBenchmark();
+        } else if (canRestoreActiveGame()) {
+            restoreActiveGame();
         } else {
             gameState = 'SETUP';
             openSettingsModal();
