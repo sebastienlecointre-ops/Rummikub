@@ -4272,7 +4272,7 @@
     document.documentElement.lang = currentLang;
     document.addEventListener('DOMContentLoaded', updateDomTranslations);
 
-    const APP_VERSION = '2026.11.12-2'; // ← à changer à chaque mise en ligne
+    const APP_VERSION = '2026.11.12-3'; // ← à changer à chaque mise en ligne
     // Coefficients de l'IA (réglés avec index.html?bench=tune, puis recopiés ici)
     const AI_DEFAULT_WEIGHTS = { risk: 4, dead: 2, flex: 5, mc: 1 };
     let playerPassedLastTurn = false; // le joueur a pioché au tour précédent (utilisé par le niveau Maître)
@@ -7195,6 +7195,26 @@
     }
 
     const ACTIVE_GAME_STORAGE_KEY = 'rummikub_active_game_v1';
+    let aiTurnSnapshot = null; // sauvegarde cohérente prise au début du tour de l'IA
+
+    // Retire de la table les rangées invalides (sauvegarde prise en plein milieu d'une animation)
+    // et rend leurs tuiles au chevalet indiqué. Le nombre total de tuiles est conservé.
+    function repairInvalidBoardRows(target) {
+        const isBad = r => {
+            if (!r || !r.tiles || r.tiles.length < RULES.minMeldLength) return true;
+            const d = detectMeldType(r.tiles);
+            const type = (d === 'run' || d === 'group') ? d : r.type;
+            return !checkMeldValidityVerbose(r.tiles, type).valid;
+        };
+        const bad = boardRows.filter(isBad);
+        if (!bad.length) return 0;
+        const tiles = bad.flatMap(r => r.tiles || []).map(cloneTile);
+        boardRows = boardRows.filter(r => !bad.includes(r));
+        if (target === 'ai') aiHand = aiHand.concat(tiles);
+        else playerHand = playerHand.concat(tiles);
+        console.warn('[Réparation] ' + bad.length + ' rangée(s) invalide(s) retirée(s) de la table, ' + tiles.length + ' tuile(s) rendue(s) au chevalet (' + target + ')');
+        return tiles.length;
+    }
 
     function saveActiveGameState() {
         if (gameState === 'TEST' || gameState === 'BENCH' || gameState === 'SETUP') return;
@@ -7204,6 +7224,12 @@
                 clearActiveGameState();
                 return;
             }
+            // Pendant le tour de l'IA, on garde la sauvegarde prise au début du tour (jamais un état à moitié animé)
+            if (aiTurnSnapshot) {
+                localStorage.setItem(ACTIVE_GAME_STORAGE_KEY, aiTurnSnapshot);
+                return;
+            }
+            if (gameState === 'ANIMATING' || isAiAnimating || isReplayingAiMove || isDemoActive) return;
             const data = {
                 version: 1,
                 timestamp: Date.now(),
@@ -7305,6 +7331,7 @@
 
             gameState = data.gameState || 'PLAYER_TURN';
             if (gameState === 'ANIMATING') gameState = 'AI_TURN';
+            if (gameState === 'AI_TURN') repairInvalidBoardRows('ai');
 
             const welcomeOverlay = document.getElementById('welcome-settings-overlay');
             if (welcomeOverlay) welcomeOverlay.style.display = 'none';
@@ -10781,8 +10808,25 @@
         catch (e) { console.error('[IA] Résumé du coup impossible :', e); return []; }
     }
 
-    // Garde-fou : quoi qu'il arrive pendant le tour de l'IA, la main revient au joueur.
     async function aiTurn() {
+        if (gameState !== 'AI_TURN') return;
+        // Table incohérente (ancienne sauvegarde corrompue) : on la répare avant que l'IA joue
+        if (repairInvalidBoardRows('ai') > 0) { try { updateUI(); } catch (e) {} }
+        try {
+            aiTurnSnapshot = null;
+            saveActiveGameState();
+            aiTurnSnapshot = localStorage.getItem(ACTIVE_GAME_STORAGE_KEY);
+        } catch (e) { aiTurnSnapshot = null; }
+        try {
+            return await aiTurnGuarded();
+        } finally {
+            aiTurnSnapshot = null;
+            if (gameState === 'PLAYER_TURN' || gameState === 'GAME_OVER') saveActiveGameState();
+        }
+    }
+
+    // Garde-fou : quoi qu'il arrive pendant le tour de l'IA, la main revient au joueur.
+    async function aiTurnGuarded() {
         if (gameState !== 'AI_TURN') return;
         const gen = gameGeneration;
         const snapAiHand = aiHand.map(cloneTile);
