@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "com.slecointre.ramituilessolo",
+        "sha256_cert_fingerprints": ["E9:AE:AC:CF:5D:F4:0F:50:D1:AE:3C:12:A7:A5:5C:05:C1:D2:03:E7:5C:BF:24:27:48:EA:4A:89:A8:E0:D1:F4"]
+      }
+    }]
